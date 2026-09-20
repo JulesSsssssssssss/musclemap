@@ -70,7 +70,8 @@ export function getExercise(slug: string) {
 
 export function parseGuide(raw: string): Guide {
   try {
-    return JSON.parse(raw) as Guide;
+    const g = JSON.parse(raw) as Guide;
+    return { steps: Array.isArray(g.steps) ? g.steps : [], tips: Array.isArray(g.tips) ? g.tips : [] };
   } catch {
     return {};
   }

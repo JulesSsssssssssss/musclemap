@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { BodySilhouette, type Highlight } from "@/components/body/BodySilhouette";
-import { GuideTabs } from "@/components/GuideTabs";
+import { ExerciseGuide } from "@/components/ExerciseGuide";
 import { AddToWorkout } from "@/components/AddToWorkout";
 import { IconBack } from "@/components/Icons";
 import { FRONT_MUSCLES, MUSCLES, type MuscleKey } from "@/lib/body";
@@ -74,7 +74,7 @@ export default async function ExercisePage({ params }: { params: Promise<{ slug:
         )}
       </div>
 
-      <GuideTabs guide={guide} />
+      <ExerciseGuide guide={guide} />
 
       <section style={{ margin: "0 20px 14px", padding: 16, borderRadius: 20, background: "var(--surf)", border: "1px solid var(--hair)", display: "flex", gap: 16, alignItems: "center" }}>
         <BodySilhouette face={face} highlights={highlights} style={{ width: 84, flex: "none" }} />

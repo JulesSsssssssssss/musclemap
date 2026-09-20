@@ -92,12 +92,10 @@ export const PERIODS = [
   { label: "6 M", months: 6 },
   { label: "1 AN", months: 12 },
 ];
-export const GUIDE_TABS = ["Exécution", "Conseils", "Erreurs courantes", "Variantes"] as const;
-export type GuideKey = "execution" | "tips" | "mistakes" | "variants";
-export const GUIDE_KEYS: GuideKey[] = ["execution", "tips", "mistakes", "variants"];
 
-export type GuideItem = { title: string; body: string };
-export type Guide = Partial<Record<GuideKey, GuideItem[]>>;
+/** Fiche d'un exercice : étapes numérotées + conseils (sous-titres et paragraphes). */
+export type GuideBlock = { kind: "h" | "p"; text: string };
+export type Guide = { steps?: string[]; tips?: GuideBlock[] };
 
 /** Résout un libellé de muscle ("Deltoïde ant.", "Grand dorsal") vers une clé de la carte. */
 const LABEL_RULES: [RegExp, string][] = [
