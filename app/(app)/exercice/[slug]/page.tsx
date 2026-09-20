@@ -10,8 +10,6 @@ import { requireUser } from "@/lib/auth";
 import { getExercise, lastPerformance, parseGuide, parseSecondary } from "@/lib/queries";
 import { dec, dayMonth } from "@/lib/format";
 
-const LEVEL_FG: Record<string, string> = { "DÉBUTANT": "#7FD98C", "AVANCÉ": "#F3F1EC" };
-const LEVEL_BG: Record<string, string> = { "DÉBUTANT": "rgba(127,217,140,.12)", "AVANCÉ": "rgba(255,255,255,.1)" };
 
 export default async function ExercisePage({ params }: { params: Promise<{ slug: string }> }) {
   const user = await requireUser();
@@ -32,9 +30,6 @@ export default async function ExercisePage({ params }: { params: Promise<{ slug:
       highlights.unshift({ muscle: key, opacity: 0.32 });
     }
   }
-
-  const fg = LEVEL_FG[exercise.level] ?? "#E8C64A";
-  const bg = LEVEL_BG[exercise.level] ?? "rgba(232,198,74,.12)";
 
   return (
     <div className="scroll" style={{ position: "relative" }}>
@@ -61,9 +56,6 @@ export default async function ExercisePage({ params }: { params: Promise<{ slug:
         <div style={{ display: "flex", gap: 7, flexWrap: "wrap", marginBottom: 18 }}>
           <span style={{ font: "500 11px var(--mono)", color: "var(--dim)", padding: "6px 10px", borderRadius: 8, background: "var(--surf2)" }}>
             {exercise.equipment}
-          </span>
-          <span style={{ font: "500 11px var(--mono)", color: fg, padding: "6px 10px", borderRadius: 8, background: bg }}>
-            {exercise.level}
           </span>
           <span style={{ font: "500 11px var(--mono)", color: "var(--acc)", padding: "6px 10px", borderRadius: 8, background: "rgba(255,91,30,.12)" }}>
             {exercise.scheme}

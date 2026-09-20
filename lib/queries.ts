@@ -47,7 +47,6 @@ export function listExercises(opts: {
   muscle?: string;
   subCode?: string;
   equipment?: string;
-  level?: string;
   search?: string;
   take?: number;
 }) {
@@ -55,7 +54,6 @@ export function listExercises(opts: {
   if (opts.muscle) where.muscle = opts.muscle;
   if (opts.subCode) where.subCode = opts.subCode;
   if (opts.equipment) where.equipment = opts.equipment.toUpperCase();
-  if (opts.level) where.level = opts.level.toUpperCase();
   if (opts.search) where.name = { contains: opts.search, mode: "insensitive" };
   return prisma.exercise.findMany({
     where,

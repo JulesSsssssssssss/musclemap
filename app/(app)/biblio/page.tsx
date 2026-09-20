@@ -4,7 +4,7 @@ import { SearchField } from "@/components/SearchField";
 import { FilterChips } from "@/components/FilterChips";
 import { AddToWorkout } from "@/components/AddToWorkout";
 import { MUSCLES } from "@/lib/body";
-import { EQUIPMENTS, LEVELS } from "@/lib/catalog";
+import { EQUIPMENTS } from "@/lib/catalog";
 import { requireUser } from "@/lib/auth";
 import { listExercises } from "@/lib/queries";
 import { prisma } from "@/lib/prisma";
@@ -17,21 +17,19 @@ const KEY_BY_LABEL = Object.fromEntries(Object.entries(MUSCLES).map(([k, v]) => 
 export default async function LibraryPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; muscle?: string; equip?: string; niveau?: string }>;
+  searchParams: Promise<{ q?: string; muscle?: string; equip?: string }>;
 }) {
   await requireUser();
   const query = await searchParams;
 
   const muscleLabel = MUSCLE_FILTER.includes(query.muscle ?? "") ? query.muscle! : MUSCLE_FILTER[0];
   const equip = EQUIPMENTS.includes(query.equip ?? "") ? query.equip! : EQUIPMENTS[0];
-  const level = LEVELS.includes(query.niveau ?? "") ? query.niveau! : LEVELS[0];
 
   const [exercises, total] = await Promise.all([
     listExercises({
       search: query.q || undefined,
       muscle: muscleLabel === MUSCLE_FILTER[0] ? undefined : KEY_BY_LABEL[muscleLabel],
       equipment: equip === EQUIPMENTS[0] ? undefined : equip,
-      level: level === LEVELS[0] ? undefined : level,
     }),
     prisma.exercise.count(),
   ]);
@@ -45,7 +43,7 @@ export default async function LibraryPage({
       <div style={{ padding: "8px 20px 14px" }}>
         <span className="eyebrow" style={{ letterSpacing: "1.8px" }}>BIBLIOTHÈQUE</span>
         <h1 style={{ margin: "5px 0 0", font: "700 26px var(--sans)", letterSpacing: "-.8px" }}>
-          {query.q || muscleLabel !== MUSCLE_FILTER[0] || equip !== EQUIPMENTS[0] || level !== LEVELS[0]
+          {query.q || muscleLabel !== MUSCLE_FILTER[0] || equip !== EQUIPMENTS[0]
             ? `${sorted.length} résultat${sorted.length > 1 ? "s" : ""}`
             : `${total} exercices`}
         </h1>

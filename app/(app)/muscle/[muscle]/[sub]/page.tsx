@@ -3,7 +3,7 @@ import { ScreenHeader } from "@/components/ScreenHeader";
 import { FilterChips } from "@/components/FilterChips";
 import { ExerciseCard } from "@/components/ExerciseCard";
 import { MUSCLES, type MuscleKey } from "@/lib/body";
-import { EQUIPMENTS, LEVELS, subsFor } from "@/lib/catalog";
+import { EQUIPMENTS, subsFor } from "@/lib/catalog";
 import { requireUser } from "@/lib/auth";
 import { listExercises, parseSecondary } from "@/lib/queries";
 
@@ -12,7 +12,7 @@ export default async function SubMusclePage({
   searchParams,
 }: {
   params: Promise<{ muscle: string; sub: string }>;
-  searchParams: Promise<{ equip?: string; niveau?: string }>;
+  searchParams: Promise<{ equip?: string }>;
 }) {
   await requireUser();
   const { muscle, sub } = await params;
@@ -25,13 +25,11 @@ export default async function SubMusclePage({
   if (!current) notFound();
 
   const equip = EQUIPMENTS.includes(query.equip ?? "") ? query.equip! : EQUIPMENTS[0];
-  const level = LEVELS.includes(query.niveau ?? "") ? query.niveau! : LEVELS[0];
 
   const exercises = await listExercises({
     muscle: key,
     subCode: current.code,
     equipment: equip === EQUIPMENTS[0] ? undefined : equip,
-    level: level === LEVELS[0] ? undefined : level,
   });
 
   const base = `/muscle/${key}/${current.code}`;
@@ -41,7 +39,6 @@ export default async function SubMusclePage({
       <ScreenHeader back={`/muscle/${key}`} eyebrow="EXERCICES CIBLÉS" title={current.name} />
 
       <FilterChips values={EQUIPMENTS} active={equip} param="equip" base={base} params={query} />
-      <FilterChips values={LEVELS} active={level} param="niveau" base={base} params={query} style="dashed" />
 
       <div style={{ padding: "0 20px 24px", display: "flex", flexDirection: "column", gap: 12 }}>
         <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between" }}>
@@ -58,7 +55,7 @@ export default async function SubMusclePage({
             <ExerciseCard
               key={e.id}
               exercise={{
-                slug: e.slug, name: e.name, equipment: e.equipment, level: e.level,
+                slug: e.slug, name: e.name, equipment: e.equipment,
                 primaryMuscle: e.primaryMuscle, image: e.image, secondary: parseSecondary(e.secondaryMuscles),
               }}
             />
