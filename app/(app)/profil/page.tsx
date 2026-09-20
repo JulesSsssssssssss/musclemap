@@ -1,0 +1,85 @@
+import Link from "next/link";
+import { SettingsRows } from "@/components/SettingsRows";
+import { IconChevron } from "@/components/Icons";
+import { logout } from "@/app/actions";
+import { requireUser } from "@/lib/auth";
+import { profileStats } from "@/lib/queries";
+import { num } from "@/lib/format";
+
+export const metadata = { title: "Profil · MuscleMap" };
+
+export default async function ProfilePage() {
+  const user = await requireUser();
+  const stats = await profileStats(user.id);
+  const perWeek = stats.months > 0 ? (stats.workouts / (stats.months * 4.33)).toFixed(1).replace(".0", "") : "0";
+
+  return (
+    <div className="scroll">
+      <div style={{ padding: "8px 20px 18px", display: "flex", alignItems: "center", gap: 15 }}>
+        <div className="gif" style={{ width: 64, height: 64, borderRadius: 22, border: "1px solid var(--hair)", display: "grid", placeItems: "center" }}>
+          <span style={{ font: "700 22px var(--sans)", color: "var(--faint)" }}>{user.name.slice(0, 1).toUpperCase()}</span>
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 3, minWidth: 0 }}>
+          <h1 style={{ margin: 0, font: "700 22px var(--sans)", letterSpacing: "-.5px" }}>{user.name}</h1>
+          <span style={{ font: "500 11px var(--mono)", color: "var(--mut)" }}>
+            {perWeek} SÉANCES / SEMAINE · {stats.months} MOIS
+          </span>
+        </div>
+      </div>
+
+      <div style={{ padding: "0 20px 18px", display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 9 }}>
+        {[
+          { value: num(stats.workouts), label: "SÉANCES", accent: false },
+          { value: `${num(stats.totalKg / 1000)} t`, label: "SOULEVÉS", accent: false },
+          { value: num(stats.records), label: "RECORDS", accent: true },
+        ].map((s) => (
+          <div
+            key={s.label}
+            style={{
+              padding: 13, borderRadius: 16,
+              background: s.accent ? "rgba(255,91,30,.1)" : "var(--surf)",
+              border: `1px solid ${s.accent ? "rgba(255,91,30,.28)" : "var(--hair)"}`,
+            }}
+          >
+            <div style={{ font: "700 21px var(--sans)", letterSpacing: "-.6px", color: s.accent ? "var(--acc)" : "var(--txt)" }}>{s.value}</div>
+            <span style={{ font: "500 9px var(--mono)", color: "var(--mut)" }}>{s.label}</span>
+          </div>
+        ))}
+      </div>
+
+      <div style={{ padding: "0 20px 24px", display: "flex", flexDirection: "column", gap: 9 }}>
+        <span className="eyebrow">RÉGLAGES</span>
+
+        <SettingsRows unit={user.unit} restSeconds={user.restSeconds} theme={user.theme} />
+
+        <Link
+          href="/progression"
+          style={{ padding: "14px 16px", borderRadius: 16, background: "var(--surf)", border: "1px solid var(--hair)", display: "flex", alignItems: "center", justifyContent: "space-between", color: "inherit" }}
+        >
+          <span style={{ font: "600 14px var(--sans)", color: "var(--txt)" }}>Historique des séances</span>
+          <span style={{ color: "var(--ghost)" }}><IconChevron /></span>
+        </Link>
+
+        <a
+          href="/api/export"
+          style={{ padding: "14px 16px", borderRadius: 16, background: "var(--surf)", border: "1px solid var(--hair)", display: "flex", alignItems: "center", justifyContent: "space-between", color: "inherit" }}
+        >
+          <span style={{ font: "600 14px var(--sans)", color: "var(--txt)" }}>Exporter mes données</span>
+          <span style={{ font: "500 11px var(--mono)", color: "var(--mut)" }}>CSV</span>
+        </a>
+
+        <div style={{ padding: "14px 16px", borderRadius: 16, background: "var(--surf)", border: "1px solid var(--hair)", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
+          <span style={{ font: "600 14px var(--sans)", minWidth: 0, overflow: "hidden", textOverflow: "ellipsis" }}>{user.email}</span>
+          <form action={logout}>
+            <button
+              type="submit"
+              style={{ minHeight: 38, padding: "0 13px", borderRadius: 11, background: "var(--surf2)", border: "1px solid var(--hair2)", color: "var(--acc)", font: "600 12px var(--sans)", cursor: "pointer" }}
+            >
+              Déconnexion
+            </button>
+          </form>
+        </div>
+      </div>
+    </div>
+  );
+}
