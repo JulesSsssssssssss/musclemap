@@ -10,6 +10,7 @@ export type CardExercise = {
   equipment: string;
   level: string;
   primaryMuscle: string;
+  image?: string | null;
   secondary: string[];
 };
 
@@ -23,9 +24,14 @@ export function ExerciseCard({ exercise }: { exercise: CardExercise }) {
         href={`/exercice/${exercise.slug}`}
         className="gif"
         aria-label={`Fiche ${exercise.name}`}
-        style={{ width: 76, height: 76, flex: "none", borderRadius: 16, border: "1px solid rgba(255,255,255,.06)", display: "grid", placeItems: "center" }}
+        style={{ width: 76, height: 76, flex: "none", borderRadius: 16, border: "1px solid rgba(255,255,255,.06)", display: "grid", placeItems: "center", overflow: "hidden" }}
       >
-        <span style={{ font: "500 8px var(--mono)", color: "var(--ghost)", letterSpacing: ".6px" }}>GIF</span>
+        {exercise.image ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={exercise.image.replace(".webp", "-thumb.webp")} alt="" width={76} height={76} loading="lazy" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+        ) : (
+          <span style={{ font: "500 8px var(--mono)", color: "var(--ghost)", letterSpacing: ".6px" }}>GIF</span>
+        )}
       </Link>
 
       <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 6 }}>

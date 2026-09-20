@@ -1,6 +1,7 @@
 import { PrismaClient } from "@prisma/client";
 import bcrypt from "bcryptjs";
 import { EXERCISES } from "./exercises";
+import imported from "./data/exercises-import.json";
 
 const prisma = new PrismaClient();
 
@@ -39,7 +40,15 @@ async function seedExercises() {
     };
     await prisma.exercise.upsert({ where: { slug: e.slug }, create: { slug: e.slug, ...data }, update: data });
   }
-  console.log(`✓ ${EXERCISES.length} exercices`);
+  for (const e of imported) {
+    const data = {
+      name: e.name, equipment: e.equipment, level: e.level, muscle: e.muscle, subCode: e.subCode,
+      primaryMuscle: e.primaryMuscle, guide: JSON.stringify(e.guide), popularity: 30,
+      description: e.description, image: e.image, sourceUrl: e.sourceUrl,
+    };
+    await prisma.exercise.upsert({ where: { slug: e.slug }, create: { slug: e.slug, ...data }, update: data });
+  }
+  console.log(`✓ ${EXERCISES.length} exercices de base + ${imported.length} importés`);
 }
 
 async function seedDemoUser() {

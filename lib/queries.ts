@@ -56,7 +56,7 @@ export function listExercises(opts: {
   if (opts.subCode) where.subCode = opts.subCode;
   if (opts.equipment) where.equipment = opts.equipment.toUpperCase();
   if (opts.level) where.level = opts.level.toUpperCase();
-  if (opts.search) where.name = { contains: opts.search };
+  if (opts.search) where.name = { contains: opts.search, mode: "insensitive" };
   return prisma.exercise.findMany({
     where,
     orderBy: [{ popularity: "desc" }, { name: "asc" }],

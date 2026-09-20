@@ -73,7 +73,12 @@ export default async function LibraryPage({
               <span style={{ width: 26, flex: "none", font: "700 15px var(--sans)", color: show ? "var(--acc)" : "transparent", textAlign: "center" }}>
                 {letter}
               </span>
-              <Link href={`/exercice/${e.slug}`} className="gif" aria-hidden="true" tabIndex={-1} style={{ width: 48, height: 48, flex: "none", borderRadius: 14 }} />
+              <Link href={`/exercice/${e.slug}`} className="gif" aria-hidden="true" tabIndex={-1} style={{ width: 48, height: 48, flex: "none", borderRadius: 14, overflow: "hidden" }}>
+                {e.image && (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={e.image.replace(".webp", "-thumb.webp")} alt="" width={48} height={48} loading="lazy" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
+                )}
+              </Link>
               <Link href={`/exercice/${e.slug}`} style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 3, color: "inherit" }}>
                 <span style={{ font: "600 14px var(--sans)", color: "var(--txt)" }}>{e.name}</span>
                 <span style={{ font: "500 10px var(--mono)", color: "var(--mut)" }}>

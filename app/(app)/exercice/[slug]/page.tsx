@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { BodySilhouette, type Highlight } from "@/components/body/BodySilhouette";
 import { GuideTabs } from "@/components/GuideTabs";
 import { AddToWorkout } from "@/components/AddToWorkout";
-import { IconBack, IconPlay } from "@/components/Icons";
+import { IconBack } from "@/components/Icons";
 import { FRONT_MUSCLES, MUSCLES, type MuscleKey } from "@/lib/body";
 import { muscleFromLabel } from "@/lib/catalog";
 import { requireUser } from "@/lib/auth";
@@ -38,7 +38,7 @@ export default async function ExercisePage({ params }: { params: Promise<{ slug:
 
   return (
     <div className="scroll" style={{ position: "relative" }}>
-      <div className="gif" style={{ position: "relative", height: 216, display: "grid", placeItems: "center" }}>
+      <div className="gif" style={{ position: "relative", height: 260, display: "grid", placeItems: "center" }}>
         <Link
           href={`/muscle/${primaryKey}/${exercise.subCode}`}
           aria-label="Retour"
@@ -50,15 +50,10 @@ export default async function ExercisePage({ params }: { params: Promise<{ slug:
         >
           <IconBack />
         </Link>
-        <div style={{ width: 64, height: 64, borderRadius: 32, background: "var(--acc)", display: "grid", placeItems: "center", color: "var(--ink)" }}>
-          <IconPlay />
-        </div>
-        <span style={{ position: "absolute", bottom: 14, left: 20, font: "500 9px var(--mono)", letterSpacing: "1.4px", color: "var(--faint)" }}>
-          VIDÉO DÉMO · 0:24
-        </span>
-        <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, height: 3, background: "rgba(255,255,255,.08)" }}>
-          <div style={{ width: "32%", height: "100%", background: "var(--acc)" }} />
-        </div>
+        {exercise.image && (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={exercise.image} alt={`Démonstration : ${exercise.name}`} width={360} height={360} style={{ height: "100%", width: "auto", maxWidth: "100%", objectFit: "contain", background: "#fff" }} />
+        )}
       </div>
 
       <div style={{ padding: "18px 20px 0" }}>
@@ -74,6 +69,9 @@ export default async function ExercisePage({ params }: { params: Promise<{ slug:
             {exercise.scheme}
           </span>
         </div>
+        {exercise.description && (
+          <p style={{ margin: "0 0 18px", font: "400 14px/1.55 var(--sans)", color: "var(--dim)" }}>{exercise.description}</p>
+        )}
       </div>
 
       <GuideTabs guide={guide} />
@@ -96,6 +94,12 @@ export default async function ExercisePage({ params }: { params: Promise<{ slug:
           </span>
         </div>
       </section>
+
+      {exercise.sourceUrl && (
+        <p style={{ margin: "0 20px 14px", font: "400 11px/1.5 var(--sans)", color: "var(--ghost)" }}>
+          Source : <a href={exercise.sourceUrl} target="_blank" rel="noopener noreferrer">docteur-fitness.com</a>
+        </p>
+      )}
 
       {last ? (
         <section

@@ -84,7 +84,7 @@ export function subsFor(muscle: MuscleKey): Sub[] {
   return SUBS[muscle] ?? DEFAULT_SUBS;
 }
 
-export const EQUIPMENTS = ["Tous", "Barre", "Haltères", "Poulie", "Machine", "Poids du corps", "Kettlebell"];
+export const EQUIPMENTS = ["Tous", "Barre", "Haltères", "Poulie", "Machine", "Poids du corps", "Kettlebell", "Élastique", "Smith machine", "Landmine", "Sangles", "Autre"];
 export const LEVELS = ["Tous niveaux", "Débutant", "Intermédiaire", "Avancé"];
 export const PERIODS = [
   { label: "1 M", months: 1 },

@@ -59,7 +59,7 @@ export default async function SubMusclePage({
               key={e.id}
               exercise={{
                 slug: e.slug, name: e.name, equipment: e.equipment, level: e.level,
-                primaryMuscle: e.primaryMuscle, secondary: parseSecondary(e.secondaryMuscles),
+                primaryMuscle: e.primaryMuscle, image: e.image, secondary: parseSecondary(e.secondaryMuscles),
               }}
             />
           ))

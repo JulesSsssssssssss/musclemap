@@ -34,6 +34,9 @@ model Exercise {
   secondaryMuscles String @default("[]")
   scheme           String @default("4 × 8-10")
   guide            String @default("{}")
+  description      String?
+  image            String?
+  sourceUrl        String?
   popularity       Int    @default(0)
 
   entries WorkoutExercise[]
