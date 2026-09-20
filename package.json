@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "prisma generate && next build",
+    "build": "prisma generate && DATABASE_URL=\"${DATABASE_URL_UNPOOLED:-$DATABASE_URL}\" prisma db push --skip-generate && EXERCISES_ONLY=1 tsx prisma/seed.ts && next build",
     "start": "next start",
     "db:push": "prisma db push",
     "db:seed": "prisma db seed",

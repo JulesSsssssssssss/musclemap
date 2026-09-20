@@ -131,6 +131,7 @@ async function seedHistory(userId: string) {
 
 async function main() {
   await seedExercises();
+  if (process.env.EXERCISES_ONLY) return;
   const user = await seedDemoUser();
   await seedHistory(user.id);
 }
