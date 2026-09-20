@@ -4,8 +4,6 @@ import { e1rm } from "./format";
 import type { MuscleKey } from "./body";
 import type { Guide } from "./catalog";
 
-export type ActiveWorkout = NonNullable<Awaited<ReturnType<typeof getActiveWorkout>>>;
-
 const workoutInclude = {
   entries: {
     orderBy: { position: "asc" as const },
@@ -16,12 +14,18 @@ const workoutInclude = {
   },
 };
 
-export function getActiveWorkout(userId: string) {
-  return prisma.workout.findFirst({
-    where: { userId, status: "active" },
+/** Toutes les séances de l'utilisateur, avec le nombre d'exercices. */
+export function listWorkouts(userId: string) {
+  return prisma.workout.findMany({
+    where: { userId },
     orderBy: { startedAt: "desc" },
-    include: workoutInclude,
+    include: { _count: { select: { entries: true } } },
   });
+}
+
+/** Séances à venir ou en cours. */
+export function countOpenWorkouts(userId: string) {
+  return prisma.workout.count({ where: { userId, status: { in: ["planned", "active"] } } });
 }
 
 export function getWorkout(userId: string, id: string) {

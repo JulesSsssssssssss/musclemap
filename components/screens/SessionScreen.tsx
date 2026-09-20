@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState, useTransition } from "react";
-import { addSet, finishWorkout, removeEntry, removeSet, renameWorkout, updateSet } from "@/app/actions";
+import { addSet, deleteWorkout, finishWorkout, removeEntry, removeSet, renameWorkout, startWorkout, updateSet } from "@/app/actions";
 import { IconCheck, IconPencil, IconTrash } from "@/components/Icons";
 import { dec, mmss } from "@/lib/format";
 
@@ -23,13 +23,15 @@ const actionBtn: React.CSSProperties = {
 
 export function SessionScreen({
   workoutId,
+  mode,
   workoutName,
   startedAt,
   entries,
   restSeconds,
   unit,
 }: {
-  workoutId: string | null;
+  workoutId: string;
+  mode: "planned" | "active";
   workoutName: string;
   startedAt: string | null;
   entries: SessionEntry[];
@@ -77,7 +79,10 @@ export function SessionScreen({
       ),
     );
 
+  const planned = mode === "planned";
+
   const toggleDone = (entryId: string, set: SessionSet) => {
+    if (planned) return;
     const next = !set.done;
     patchSet(entryId, set.id, { done: next });
     if (next) setRest(restSeconds);
@@ -86,32 +91,11 @@ export function SessionScreen({
     });
   };
 
-  if (!workoutId) {
-    return (
-      <div className="scroll">
-        <SessionHeader name={workoutName} elapsed={0} count={0} disabled />
-        <div style={{ padding: "60px 34px", display: "flex", flexDirection: "column", alignItems: "center", gap: 16, textAlign: "center" }}>
-          <div style={{ width: 104, height: 104, borderRadius: 32, border: "1px dashed rgba(255,255,255,.14)", display: "grid", placeItems: "center" }}>
-            <svg width="36" height="36" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-              <rect x="3.5" y="4.5" width="17" height="16" rx="4" stroke="#3D3933" strokeWidth="1.7" />
-              <path d="M12 9v7M8.5 12.5h7" stroke="#3D3933" strokeWidth="1.8" strokeLinecap="round" />
-            </svg>
-          </div>
-          <span style={{ font: "700 19px var(--sans)" }}>Aucune séance en cours</span>
-          <span style={{ font: "400 13px/1.5 var(--sans)", color: "var(--mut)" }}>
-            Choisis un muscle sur le corps, ajoute tes exercices, et c&apos;est parti.
-          </span>
-          <Link href="/" className="primary tap" style={{ marginTop: 6, minHeight: 52, padding: "0 24px", width: "auto", borderRadius: 17, textDecoration: "none" }}>
-            Ouvrir le corps
-          </Link>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="scroll">
       <SessionHeader
+        workoutId={workoutId}
+        planned={planned}
         name={workoutName}
         elapsed={elapsed}
         count={local.length}
@@ -119,7 +103,7 @@ export function SessionScreen({
       />
 
       <div style={{ padding: "0 20px 24px", display: "flex", flexDirection: "column", gap: 12 }}>
-        {rest > 0 && (
+        {!planned && rest > 0 && (
           <div
             role="timer"
             style={{
@@ -150,7 +134,7 @@ export function SessionScreen({
 
         {local.length === 0 && (
           <p style={{ textAlign: "center", padding: "30px 10px", font: "400 13px/1.5 var(--sans)", color: "var(--mut)" }}>
-            Séance vide pour l&apos;instant.<br />Ajoute un premier exercice ci-dessous.
+            Séance vide pour l&apos;instant.<br />Ajoute un premier exercice depuis la bibliothèque.
           </p>
         )}
 
@@ -247,10 +231,12 @@ export function SessionScreen({
 
                       <button
                         onClick={() => toggleDone(entry.id, set)}
+                        disabled={planned}
+                        title={planned ? "Démarre la séance pour valider tes séries" : undefined}
                         aria-label={set.done ? `Annuler la série ${j + 1}` : `Valider la série ${j + 1}`}
                         aria-pressed={set.done}
                         style={{
-                          width: 44, height: 44, borderRadius: 13, cursor: "pointer", display: "grid", placeItems: "center", padding: 0,
+                          width: 44, height: 44, borderRadius: 13, cursor: planned ? "default" : "pointer", opacity: planned ? 0.35 : 1, display: "grid", placeItems: "center", padding: 0,
                           border: `1px solid ${set.done ? "var(--acc)" : "rgba(255,255,255,.14)"}`,
                           background: set.done ? "var(--acc)" : "transparent",
                           color: set.done ? "var(--ink)" : "var(--dark)",
@@ -300,28 +286,41 @@ export function SessionScreen({
         })}
 
         <Link
-          href="/"
+          href="/biblio"
           className="tap"
           style={{ minHeight: 56, borderRadius: 18, border: "1px dashed rgba(255,255,255,.16)", color: "var(--acc)", font: "600 15px var(--sans)", display: "grid", placeItems: "center", marginTop: 2 }}
         >
           + Ajouter un exercice
         </Link>
       </div>
+
+      {planned && (
+        <div style={{ position: "sticky", bottom: 0, padding: "24px 20px 12px", background: "linear-gradient(to bottom, transparent, var(--ink) 45%)" }}>
+          <form action={startWorkout}>
+            <input type="hidden" name="workoutId" value={workoutId} />
+            <button type="submit" className="primary" disabled={local.length === 0} style={{ minHeight: 58, borderRadius: 19, boxShadow: "0 14px 34px rgba(0,0,0,.6)" }}>
+              ▶ Démarrer la séance
+            </button>
+          </form>
+        </div>
+      )}
     </div>
   );
 }
 
 function SessionHeader({
+  workoutId,
+  planned,
   name,
   elapsed,
   count,
-  disabled,
   canFinish,
 }: {
+  workoutId: string;
+  planned: boolean;
   name: string;
   elapsed: number;
   count: number;
-  disabled?: boolean;
   canFinish?: boolean;
 }) {
   const [editing, setEditing] = useState(false);
@@ -329,8 +328,10 @@ function SessionHeader({
   return (
     <header style={{ padding: "6px 20px 12px", display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12 }}>
       <div style={{ display: "flex", flexDirection: "column", gap: 5, minWidth: 0, flex: 1 }}>
+        <Link href="/seance" style={{ font: "600 12px var(--sans)", color: "var(--dim)" }}>← Mes séances</Link>
         {editing ? (
           <form action={renameWorkout} onSubmit={() => setEditing(false)} style={{ display: "flex", gap: 8 }}>
+            <input type="hidden" name="workoutId" value={workoutId} />
             <input className="field" name="name" defaultValue={name} autoFocus style={{ height: 40, borderRadius: 12 }} />
             <button type="submit" className="iconbtn" aria-label="Valider" style={{ height: 40, width: 40, minWidth: 40 }}>
               <IconCheck size={15} />
@@ -339,31 +340,39 @@ function SessionHeader({
         ) : (
           <h1 style={{ margin: 0 }}>
             <button
-              onClick={() => !disabled && setEditing(true)}
-              aria-label={disabled ? undefined : `Renommer la séance « ${name} »`}
-              style={{ display: "flex", alignItems: "center", gap: 8, background: "none", border: 0, padding: 0, cursor: disabled ? "default" : "pointer", color: "var(--txt)", textAlign: "left", font: "700 24px var(--sans)", letterSpacing: "-.5px" }}
+              onClick={() => setEditing(true)}
+              aria-label={`Renommer la séance « ${name} »`}
+              style={{ display: "flex", alignItems: "center", gap: 8, background: "none", border: 0, padding: 0, cursor: "pointer", color: "var(--txt)", textAlign: "left", font: "700 24px var(--sans)", letterSpacing: "-.5px" }}
             >
               <span>{name}</span>
-              {!disabled && <span style={{ color: "var(--faint)", display: "grid" }}><IconPencil /></span>}
+              <span style={{ color: "var(--faint)", display: "grid" }}><IconPencil /></span>
             </button>
           </h1>
         )}
         <span style={{ font: "500 12px var(--mono)", color: "var(--mut)" }}>
-          {mmss(elapsed)} · {count} exercice{count > 1 ? "s" : ""}
+          {planned ? "À VENIR · " : `${mmss(elapsed)} · `}{count} exercice{count > 1 ? "s" : ""}
         </span>
       </div>
 
-      {!disabled && (
+      {planned ? (
+        <form action={deleteWorkout}>
+          <input type="hidden" name="workoutId" value={workoutId} />
+          <button type="submit" aria-label="Supprimer la séance" style={actionBtn}>
+            <IconTrash />
+          </button>
+        </form>
+      ) : (
         <form action={finishWorkout}>
+          <input type="hidden" name="workoutId" value={workoutId} />
           <input type="hidden" name="elapsed" value={elapsed} />
           <button
             type="submit"
             disabled={!canFinish}
             style={{
               flex: "none", minHeight: 44, padding: "0 16px", borderRadius: 14,
-              background: "var(--surf2)", border: "1px solid rgba(255,255,255,.1)",
-              color: canFinish ? "var(--txt)" : "var(--dark)",
-              font: "600 13px var(--sans)", cursor: canFinish ? "pointer" : "default",
+              background: canFinish ? "var(--acc)" : "var(--surf2)", border: "1px solid rgba(255,255,255,.1)",
+              color: canFinish ? "var(--ink)" : "var(--dark)",
+              font: "700 13px var(--sans)", cursor: canFinish ? "pointer" : "default",
             }}
           >
             Terminer
@@ -373,4 +382,3 @@ function SessionHeader({
     </header>
   );
 }
-

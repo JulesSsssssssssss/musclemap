@@ -47,36 +47,79 @@ export async function logout() {
   redirect("/connexion");
 }
 
-/* ── Séance ───────────────────────────────────────────────────────────────── */
+/* ── Séances ──────────────────────────────────────────────────────────────── */
 
-async function activeWorkout(userId: string) {
-  return prisma.workout.findFirst({ where: { userId, status: "active" }, orderBy: { startedAt: "desc" } });
+/** Séance de l'utilisateur, si elle existe. */
+async function ownWorkout(userId: string, id: string) {
+  return prisma.workout.findFirst({ where: { id, userId } });
 }
 
-/** Crée la séance du jour si besoin. */
-export async function ensureWorkout(userId: string, name?: string) {
-  const existing = await activeWorkout(userId);
-  if (existing) return existing;
-  const day = ["Dimanche", "Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi"][new Date().getDay()];
-  return prisma.workout.create({ data: { userId, name: name ?? `Séance ${day.toLowerCase()}` } });
-}
+const DAYS = ["dimanche", "lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi"];
+const defaultName = () => `Séance ${DAYS[new Date().getDay()]}`;
 
-export async function startWorkout() {
+/** Crée une séance à venir (status « planned »), sans la démarrer. */
+export async function createWorkout(formData: FormData) {
   const user = await requireUser();
-  await ensureWorkout(user.id);
+  const name = String(formData.get("name") ?? "").trim().slice(0, 60) || defaultName();
+  const workout = await prisma.workout.create({ data: { userId: user.id, name, status: "planned" } });
+  revalidatePath("/seance");
+  redirect(`/seance/${workout.id}`);
+}
+
+/** Démarre une séance planifiée : le chrono part de maintenant. */
+export async function startWorkout(formData: FormData) {
+  const user = await requireUser();
+  const id = String(formData.get("workoutId") ?? "");
+  const workout = await ownWorkout(user.id, id);
+  if (!workout) redirect("/seance");
+  if (workout.status === "planned") {
+    await prisma.workout.update({ where: { id }, data: { status: "active", startedAt: new Date() } });
+  }
+  revalidatePath("/seance");
+  redirect(`/seance/${id}`);
+}
+
+export async function deleteWorkout(formData: FormData) {
+  const user = await requireUser();
+  const id = String(formData.get("workoutId") ?? "");
+  const workout = await ownWorkout(user.id, id);
+  if (workout) await prisma.workout.delete({ where: { id } });
   revalidatePath("/seance");
   redirect("/seance");
 }
 
-export type AddResult = { workoutName: string; exercises: number; sets: number };
+export type EditableWorkout = { id: string; name: string; status: string; exercises: number };
 
-/** Ajoute un exercice à la séance en cours (créée à la volée si besoin). */
-export async function addExerciseToWorkout(slug: string): Promise<AddResult | null> {
+/** Séances auxquelles on peut encore ajouter des exercices (à venir + en cours). */
+export async function listEditableWorkouts(): Promise<EditableWorkout[]> {
+  const user = await requireUser();
+  const rows = await prisma.workout.findMany({
+    where: { userId: user.id, status: { in: ["planned", "active"] } },
+    orderBy: [{ status: "asc" }, { startedAt: "desc" }],
+    include: { _count: { select: { entries: true } } },
+  });
+  return rows.map((w) => ({ id: w.id, name: w.name, status: w.status, exercises: w._count.entries }));
+}
+
+export type AddResult = { workoutId: string; workoutName: string; exercises: number; sets: number };
+
+/** Ajoute un exercice à une séance existante, ou à une nouvelle séance si `newName` est fourni. */
+export async function addExerciseToWorkout(
+  slug: string,
+  target: { workoutId: string } | { newName: string },
+): Promise<AddResult | null> {
   const user = await requireUser();
   const exercise = await prisma.exercise.findUnique({ where: { slug } });
   if (!exercise) return null;
 
-  const workout = await ensureWorkout(user.id);
+  const workout =
+    "workoutId" in target
+      ? await ownWorkout(user.id, target.workoutId)
+      : await prisma.workout.create({
+          data: { userId: user.id, name: target.newName.trim().slice(0, 60) || defaultName(), status: "planned" },
+        });
+  if (!workout || workout.status === "done") return null;
+
   const count = await prisma.workoutExercise.count({ where: { workoutId: workout.id } });
 
   // Pré-remplit avec la dernière performance connue sur cet exercice.
@@ -110,6 +153,7 @@ export async function addExerciseToWorkout(slug: string): Promise<AddResult | nu
   revalidatePath("/seance");
   revalidatePath("/");
   return {
+    workoutId: workout.id,
     workoutName: workout.name,
     exercises: totals.length,
     sets: totals.reduce((a, t) => a + t._count.sets, 0),
@@ -171,8 +215,8 @@ export async function updateSet(input: { setId: string; weight?: number; reps?: 
 
 export async function renameWorkout(formData: FormData) {
   const user = await requireUser();
-  const name = String(formData.get("name") ?? "").trim();
-  const workout = await activeWorkout(user.id);
+  const name = String(formData.get("name") ?? "").trim().slice(0, 60);
+  const workout = await ownWorkout(user.id, String(formData.get("workoutId") ?? ""));
   if (!workout || !name) return;
   await prisma.workout.update({ where: { id: workout.id }, data: { name } });
   revalidatePath("/seance");
@@ -193,7 +237,7 @@ export async function finishWorkout(formData: FormData) {
   const user = await requireUser();
   const elapsed = Number(formData.get("elapsed") ?? 0);
   const workout = await prisma.workout.findFirst({
-    where: { userId: user.id, status: "active" },
+    where: { id: String(formData.get("workoutId") ?? ""), userId: user.id, status: "active" },
     include: { entries: { include: { sets: true } } },
   });
   if (!workout) redirect("/seance");
@@ -232,14 +276,6 @@ export async function finishWorkout(formData: FormData) {
   revalidatePath("/seance");
   revalidatePath("/progression");
   redirect(`/seance/${workout.id}/resume`);
-}
-
-export async function discardWorkout() {
-  const user = await requireUser();
-  const workout = await activeWorkout(user.id);
-  if (workout) await prisma.workout.delete({ where: { id: workout.id } });
-  revalidatePath("/seance");
-  redirect("/seance");
 }
 
 /* ── Réglages ─────────────────────────────────────────────────────────────── */
