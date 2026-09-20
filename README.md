@@ -73,3 +73,7 @@ faisceaux dans `lib/catalog.ts`, et les exercices de démarrage dans
 - L'authentification est volontairement minimale (e-mail + mot de passe).
   `lib/auth.ts` est isolé pour pouvoir passer à Auth.js / OAuth sans toucher
   aux écrans.
+
+## Crédits
+
+Les tracés anatomiques (`lib/body-data.ts`) proviennent de [react-native-body-highlighter](https://github.com/HichamELBSI/react-native-body-highlighter), licence MIT, © 2022 Hicham ELABBASSI.

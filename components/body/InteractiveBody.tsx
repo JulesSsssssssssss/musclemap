@@ -1,11 +1,6 @@
 "use client";
 
-import {
-  BACK_SHAPES, DETAIL_BACK, DETAIL_FRONT, FRONT_SHAPES, SILHOUETTE, VIEWBOX,
-  type MuscleKey,
-} from "@/lib/body";
-import { Shapes } from "./Shapes";
-import { MUSCLES } from "@/lib/body";
+import { MUSCLES, bodyFor, viewBoxFor, type MuscleKey } from "@/lib/body";
 
 /** Carte du corps cliquable — cœur de l'écran d'accueil. */
 export function InteractiveBody({
@@ -17,16 +12,17 @@ export function InteractiveBody({
   selected: MuscleKey | null;
   onSelect: (m: MuscleKey) => void;
 }) {
-  const shapes = face ? FRONT_SHAPES : BACK_SHAPES;
-  const detail = face ? DETAIL_FRONT : DETAIL_BACK;
+  const body = bodyFor(face);
+  const muscles = Object.entries(body.muscles) as [MuscleKey, string[]][];
 
   return (
-    <svg viewBox={VIEWBOX} style={{ width: "100%", height: "100%", display: "block" }} role="group" aria-label="Carte musculaire">
-      <g fill="#45403A" stroke="#FFFFFF" strokeOpacity=".22" strokeWidth="1">
-        <Shapes shapes={SILHOUETTE} />
+    <svg viewBox={viewBoxFor(face)} style={{ width: "100%", height: "100%", display: "block" }} role="group" aria-label="Carte musculaire">
+      <path d={body.outline} fill="#2F2B27" />
+      <g fill="#46413B" stroke="#151412" strokeWidth="1.2">
+        {body.base.map((d, i) => <path key={i} d={d} />)}
       </g>
 
-      {(Object.keys(shapes) as MuscleKey[]).map((key) => {
+      {muscles.map(([key, ds]) => {
         const on = key === selected;
         return (
           <g
@@ -45,24 +41,16 @@ export function InteractiveBody({
             style={{
               cursor: "pointer",
               transition: "fill .2s ease, filter .2s ease",
-              filter: on ? "drop-shadow(0 0 9px rgba(255,91,30,.55))" : "none",
+              filter: on ? "drop-shadow(0 0 14px rgba(255,91,30,.6))" : "none",
             }}
-            fill={on ? "#FF5B1E" : "#FFFFFF"}
-            fillOpacity={on ? 1 : 0.14}
-            stroke="#FFFFFF"
-            strokeOpacity={on ? 0.75 : 0.3}
-            strokeWidth="0.9"
+            fill={on ? "#FF5B1E" : "#6A635B"}
+            stroke={on ? "#FF8A5C" : "#151412"}
+            strokeWidth="1.2"
           >
-            <Shapes shapes={shapes[key]!} />
+            {ds.map((d, i) => <path key={i} d={d} />)}
           </g>
         );
       })}
-
-      <g fill="none" stroke="#000000" strokeOpacity=".38" strokeWidth="1.1" strokeLinecap="round" style={{ pointerEvents: "none" }}>
-        {detail.map((d, i) => (
-          <path key={i} d={d} />
-        ))}
-      </g>
     </svg>
   );
 }

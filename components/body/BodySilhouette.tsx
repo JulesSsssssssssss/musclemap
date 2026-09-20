@@ -1,12 +1,8 @@
-import { DETAIL_BACK, DETAIL_FRONT, SILHOUETTE, VIEWBOX, shapesFor, type MuscleKey } from "@/lib/body";
-import { Shapes } from "./Shapes";
+import { bodyFor, pathsFor, viewBoxFor, type MuscleKey } from "@/lib/body";
 
 export type Highlight = { muscle: MuscleKey; opacity: number };
 
-/**
- * Silhouette statique avec des muscles surlignés — utilisée sur la fiche
- * exercice, le résumé de séance et la répartition de progression.
- */
+/** Silhouette anatomique avec muscles surlignés (fiche exercice, résumé de séance, progression). */
 export function BodySilhouette({
   face = true,
   highlights = [],
@@ -18,22 +14,20 @@ export function BodySilhouette({
   style?: React.CSSProperties;
   className?: string;
 }) {
-  const detail = face ? DETAIL_FRONT : DETAIL_BACK;
+  const body = bodyFor(face);
+  const muscles = Object.entries(body.muscles);
   return (
-    <svg viewBox={VIEWBOX} style={style} className={className} aria-hidden="true">
-      <g fill="#45403A" stroke="#FFFFFF" strokeOpacity=".22" strokeWidth="1">
-        <Shapes shapes={SILHOUETTE} />
+    <svg viewBox={viewBoxFor(face)} style={style} className={className} aria-hidden="true">
+      <path d={body.outline} fill="#3A3631" />
+      <g fill="#4A453F" stroke="#1A1815" strokeWidth="1.2">
+        {body.base.map((d, i) => <path key={i} d={d} />)}
+        {muscles.flatMap(([key, ds]) => ds.map((d, i) => <path key={`${key}${i}`} d={d} fill="#57514A" />))}
       </g>
       {highlights.map((h) => (
-        <g key={`${h.muscle}-${h.opacity}`} fill="#FF5B1E" fillOpacity={h.opacity}>
-          <Shapes shapes={shapesFor(h.muscle, face)} />
+        <g key={`${h.muscle}-${h.opacity}`} fill="#FF5B1E" fillOpacity={h.opacity} stroke="#FF5B1E" strokeOpacity={h.opacity} strokeWidth="1.5">
+          {pathsFor(h.muscle, face).map((d, i) => <path key={i} d={d} />)}
         </g>
       ))}
-      <g fill="none" stroke="#000000" strokeOpacity=".38" strokeWidth="1.1" strokeLinecap="round" style={{ pointerEvents: "none" }}>
-        {detail.map((d, i) => (
-          <path key={i} d={d} />
-        ))}
-      </g>
     </svg>
   );
 }
