@@ -38,13 +38,13 @@ export default async function ExercisePage({ params }: { params: Promise<{ slug:
 
   return (
     <div className="scroll" style={{ position: "relative" }}>
-      <div className="gif" style={{ position: "relative", height: 260, display: "grid", placeItems: "center" }}>
+      <div style={{ position: "relative", display: "flex", justifyContent: "center", background: "#fff", minHeight: 96 }}>
         <Link
           href={`/muscle/${primaryKey}/${exercise.subCode}`}
           aria-label="Retour"
           style={{
             position: "absolute", top: 8, left: 20, width: 44, height: 44, borderRadius: 14,
-            background: "rgba(10,11,10,.72)", border: "1px solid rgba(255,255,255,.1)",
+            background: "rgba(10,11,10,.72)", border: "1px solid rgba(255,255,255,.1)", zIndex: 1,
             display: "grid", placeItems: "center", color: "var(--txt)",
           }}
         >
@@ -52,7 +52,7 @@ export default async function ExercisePage({ params }: { params: Promise<{ slug:
         </Link>
         {exercise.image && (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={exercise.image} alt={`Démonstration : ${exercise.name}`} width={360} height={360} style={{ height: "100%", width: "auto", maxWidth: "100%", objectFit: "contain", background: "#fff" }} />
+          <img src={exercise.image} alt={`Démonstration : ${exercise.name}`} width={360} height={360} style={{ display: "block", width: "min(100%, 360px)", height: "auto", aspectRatio: "1 / 1", objectFit: "contain" }} />
         )}
       </div>
 
@@ -104,7 +104,7 @@ export default async function ExercisePage({ params }: { params: Promise<{ slug:
       {last ? (
         <section
           style={{
-            margin: "0 20px 120px", padding: "15px 16px", borderRadius: 20,
+            margin: "0 20px 16px", padding: "15px 16px", borderRadius: 20,
             background: "linear-gradient(100deg,rgba(255,91,30,.1),rgba(255,91,30,.02))",
             border: "1px solid rgba(255,91,30,.22)", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12,
           }}
@@ -124,7 +124,7 @@ export default async function ExercisePage({ params }: { params: Promise<{ slug:
           )}
         </section>
       ) : (
-        <section style={{ margin: "0 20px 120px", padding: "15px 16px", borderRadius: 20, background: "var(--surf)", border: "1px solid var(--hair)" }}>
+        <section style={{ margin: "0 20px 16px", padding: "15px 16px", borderRadius: 20, background: "var(--surf)", border: "1px solid var(--hair)" }}>
           <span className="eyebrow" style={{ letterSpacing: "1.4px" }}>PREMIÈRE FOIS</span>
           <p style={{ margin: "6px 0 0", font: "400 13px/1.45 var(--sans)", color: "var(--dim)" }}>
             Aucune donnée sur cet exercice. Ajoute-le à ta séance pour commencer à suivre ta charge.
@@ -132,10 +132,8 @@ export default async function ExercisePage({ params }: { params: Promise<{ slug:
         </section>
       )}
 
-      <div style={{ position: "absolute", left: 0, right: 0, bottom: 10, padding: "0 20px", pointerEvents: "none" }}>
-        <div style={{ pointerEvents: "auto" }}>
-          <AddToWorkout slug={exercise.slug} variant="primary" />
-        </div>
+      <div style={{ position: "sticky", bottom: 0, padding: "24px 20px 12px", background: "linear-gradient(to bottom, transparent, var(--ink) 45%)" }}>
+        <AddToWorkout slug={exercise.slug} variant="primary" />
       </div>
     </div>
   );
