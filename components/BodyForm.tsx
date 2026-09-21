@@ -31,6 +31,9 @@ const FIELDS = [
   { name: "thigh", label: "Cuisse" },
 ] as const;
 
+const labelStyle: React.CSSProperties = { display: "flex", flexDirection: "column", gap: 6, minWidth: 0 };
+const eyebrowStyle: React.CSSProperties = { letterSpacing: "1px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" };
+
 export function BodyForm({ today, unit }: { today: string; unit: string }) {
   const [pending, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -63,22 +66,23 @@ export function BodyForm({ today, unit }: { today: string; unit: string }) {
 
   return (
     <form onSubmit={onSubmit} style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-        <label style={{ display: "flex", flexDirection: "column", gap: 5 }}>
-          <span className="eyebrow">DATE</span>
-          <input className="field" type="date" name="date" defaultValue={today} max={today} style={{ height: 48 }} />
+      {/* minWidth: 0 → les colonnes de la grille peuvent rétrécir (sinon le champ date déborde sur iOS). */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+        <label style={labelStyle}>
+          <span className="eyebrow" style={eyebrowStyle}>DATE</span>
+          <input className="field" type="date" name="date" defaultValue={today} max={today} style={{ height: 48, minWidth: 0 }} />
         </label>
-        <label style={{ display: "flex", flexDirection: "column", gap: 5 }}>
-          <span className="eyebrow">POIDS ({unit.toUpperCase()})</span>
-          <input className="field" name="weight" inputMode="decimal" placeholder="ex. 78,5" autoComplete="off" style={{ height: 48 }} />
+        <label style={labelStyle}>
+          <span className="eyebrow" style={eyebrowStyle}>POIDS ({unit.toUpperCase()})</span>
+          <input className="field" name="weight" inputMode="decimal" placeholder="ex. 78,5" autoComplete="off" style={{ height: 48, minWidth: 0 }} />
         </label>
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 10 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
         {FIELDS.map((f) => (
-          <label key={f.name} style={{ display: "flex", flexDirection: "column", gap: 5 }}>
-            <span className="eyebrow">{f.label.toUpperCase()} (CM)</span>
-            <input className="field" name={f.name} inputMode="decimal" placeholder="—" autoComplete="off" style={{ height: 48 }} />
+          <label key={f.name} style={labelStyle}>
+            <span className="eyebrow" style={eyebrowStyle}>{f.label.toUpperCase()} (CM)</span>
+            <input className="field" name={f.name} inputMode="decimal" placeholder="—" autoComplete="off" style={{ height: 48, minWidth: 0 }} />
           </label>
         ))}
       </div>
