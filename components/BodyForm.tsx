@@ -67,7 +67,7 @@ export function BodyForm({ today, unit }: { today: string; unit: string }) {
   return (
     <form onSubmit={onSubmit} style={{ display: "flex", flexDirection: "column", gap: 10 }}>
       {/* minWidth: 0 → les colonnes de la grille peuvent rétrécir (sinon le champ date déborde sur iOS). */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) minmax(0,1fr)", gap: 12 }}>
         <label style={labelStyle}>
           <span className="eyebrow" style={eyebrowStyle}>DATE</span>
           <input className="field" type="date" name="date" defaultValue={today} max={today} style={{ height: 48, minWidth: 0 }} />
@@ -78,7 +78,7 @@ export function BodyForm({ today, unit }: { today: string; unit: string }) {
         </label>
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) minmax(0,1fr)", gap: 12 }}>
         {FIELDS.map((f) => (
           <label key={f.name} style={labelStyle}>
             <span className="eyebrow" style={eyebrowStyle}>{f.label.toUpperCase()} (CM)</span>
