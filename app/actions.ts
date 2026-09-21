@@ -169,6 +169,21 @@ export async function removeEntry(formData: FormData) {
   revalidatePath("/seance");
 }
 
+/** Enregistre le nouvel ordre des exercices d'une séance. */
+export async function reorderEntries(workoutId: string, orderedIds: string[]) {
+  const user = await requireUser();
+  const entries = await prisma.workoutExercise.findMany({
+    where: { workoutId, workout: { userId: user.id } },
+    select: { id: true },
+  });
+  const known = new Set(entries.map((e) => e.id));
+  if (orderedIds.length !== known.size || !orderedIds.every((id) => known.has(id))) return;
+  await prisma.$transaction(
+    orderedIds.map((id, position) => prisma.workoutExercise.update({ where: { id }, data: { position } })),
+  );
+  revalidatePath("/seance");
+}
+
 export async function addSet(formData: FormData) {
   const user = await requireUser();
   const entryId = String(formData.get("entryId") ?? "");

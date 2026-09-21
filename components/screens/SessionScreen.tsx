@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState, useTransition } from "react";
-import { addSet, deleteWorkout, finishWorkout, removeEntry, removeSet, renameWorkout, startWorkout, updateSet } from "@/app/actions";
+import { addSet, deleteWorkout, finishWorkout, removeEntry, removeSet, renameWorkout, reorderEntries, startWorkout, updateSet } from "@/app/actions";
 import { IconCheck, IconPencil, IconTrash } from "@/components/Icons";
 import { dec, mmss } from "@/lib/format";
 
@@ -81,6 +81,50 @@ export function SessionScreen({
 
   const planned = mode === "planned";
 
+  const listRef = useRef<HTMLDivElement>(null);
+  const [dragging, setDragging] = useState<string | null>(null);
+  const localRef = useRef(local);
+  localRef.current = local;
+
+  /** Déplace un exercice de `from` à `to` ; l'exercice ouvert suit le mouvement. */
+  const move = (from: number, to: number) => {
+    if (from === to || to < 0 || to >= localRef.current.length) return;
+    setLocal((prev) => {
+      const next = [...prev];
+      next.splice(to, 0, next.splice(from, 1)[0]);
+      return next;
+    });
+    setOpen((o) => (o === from ? to : from < o && o <= to ? o - 1 : to <= o && o < from ? o + 1 : o));
+  };
+
+  const saveOrder = () =>
+    startAction(async () => {
+      await reorderEntries(workoutId, localRef.current.map((e) => e.id));
+    });
+
+  const startDrag = (e: React.PointerEvent, id: string) => {
+    e.preventDefault();
+    e.currentTarget.setPointerCapture(e.pointerId);
+    setDragging(id);
+  };
+
+  const dragOver = (e: React.PointerEvent, id: string) => {
+    if (dragging !== id || !listRef.current) return;
+    const cards = Array.from(listRef.current.querySelectorAll<HTMLElement>("[data-entry]"));
+    const from = localRef.current.findIndex((x) => x.id === id);
+    const to = cards.findIndex((c) => {
+      const r = c.getBoundingClientRect();
+      return e.clientY >= r.top && e.clientY <= r.bottom;
+    });
+    if (to !== -1) move(from, to);
+  };
+
+  const endDrag = () => {
+    if (!dragging) return;
+    setDragging(null);
+    saveOrder();
+  };
+
   const toggleDone = (entryId: string, set: SessionSet) => {
     if (planned) return;
     const next = !set.done;
@@ -102,7 +146,7 @@ export function SessionScreen({
         canFinish={local.some((e) => e.sets.some((s) => s.done))}
       />
 
-      <div style={{ padding: "0 20px 24px", display: "flex", flexDirection: "column", gap: 12 }}>
+      <div ref={listRef} style={{ padding: "0 20px 24px", display: "flex", flexDirection: "column", gap: 12 }}>
         {!planned && rest > 0 && (
           <div
             role="timer"
@@ -143,17 +187,41 @@ export function SessionScreen({
           const full = done === entry.sets.length && entry.sets.length > 0;
           const isOpen = i === open;
           return (
-            <div key={entry.id} style={{ borderRadius: 20, background: "var(--surf)", border: `1px solid ${isOpen ? "var(--hair2)" : "var(--hair)"}`, overflow: "hidden" }}>
+            <div
+              key={entry.id}
+              data-entry
+              style={{
+                borderRadius: 20, background: "var(--surf)", overflow: "hidden",
+                border: `1px solid ${dragging === entry.id ? "var(--acc)" : isOpen ? "var(--hair2)" : "var(--hair)"}`,
+                opacity: dragging === entry.id ? 0.85 : 1,
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "center" }}>
+              <button
+                onPointerDown={(e) => startDrag(e, entry.id)}
+                onPointerMove={(e) => dragOver(e, entry.id)}
+                onPointerUp={endDrag}
+                onPointerCancel={endDrag}
+                onKeyDown={(e) => {
+                  if (e.key !== "ArrowUp" && e.key !== "ArrowDown") return;
+                  e.preventDefault();
+                  move(i, i + (e.key === "ArrowUp" ? -1 : 1));
+                  saveOrder();
+                }}
+                aria-label={`Déplacer « ${entry.name} » (glisser, ou flèches haut/bas)`}
+                style={{ width: 44, alignSelf: "stretch", flex: "none", display: "grid", placeItems: "center", background: "none", border: 0, cursor: "grab", touchAction: "none", padding: 0 }}
+              >
+                <span style={{ width: 20, display: "flex", flexDirection: "column", gap: 3, alignItems: "center" }} aria-hidden="true">
+                  <span style={{ width: 14, height: 1.5, background: "var(--faint)" }} />
+                  <span style={{ width: 14, height: 1.5, background: "var(--faint)" }} />
+                  <span style={{ width: 14, height: 1.5, background: "var(--faint)" }} />
+                </span>
+              </button>
               <button
                 onClick={() => setOpen(isOpen ? -1 : i)}
                 aria-expanded={isOpen}
-                style={{ width: "100%", display: "flex", alignItems: "center", gap: 12, padding: "13px 14px", background: "none", border: 0, cursor: "pointer", textAlign: "left" }}
+                style={{ flex: 1, minWidth: 0, display: "flex", alignItems: "center", gap: 12, padding: "13px 14px 13px 0", background: "none", border: 0, cursor: "pointer", textAlign: "left" }}
               >
-                <span style={{ width: 20, display: "flex", flexDirection: "column", gap: 3, flex: "none", alignItems: "center" }} aria-hidden="true">
-                  <span style={{ width: 14, height: 1.5, background: "#3D3933" }} />
-                  <span style={{ width: 14, height: 1.5, background: "#3D3933" }} />
-                  <span style={{ width: 14, height: 1.5, background: "#3D3933" }} />
-                </span>
                 <div className="gif" style={{ width: 44, height: 44, flex: "none", borderRadius: 13 }} />
                 <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 3 }}>
                   <span style={{ font: "600 14px var(--sans)", color: "var(--txt)" }}>{entry.name}</span>
@@ -168,6 +236,7 @@ export function SessionScreen({
                   {done}/{entry.sets.length}
                 </span>
               </button>
+              </div>
 
               {isOpen && (
                 <div style={{ padding: "0 14px 14px" }}>
