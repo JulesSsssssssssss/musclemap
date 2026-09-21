@@ -182,7 +182,7 @@ export default async function ProgressionPage({
         )}
         {history.map((w) => {
           const { d, m } = dayMonth(w.startedAt);
-          const sets = w.entries.reduce((a, e) => a + e.sets.filter((s) => s.done).length, 0);
+          const sets = w.entries.reduce((a, e) => a + e.sets.filter((s) => s.done && s.kind === "work").length, 0);
           return (
             <Link
               key={w.id}

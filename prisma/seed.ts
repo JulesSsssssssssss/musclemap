@@ -14,7 +14,8 @@ async function main() {
     await prisma.exercise.upsert({ where: { slug: e.slug }, create: { slug: e.slug, ...data }, update: data });
   }
   const { count } = await prisma.exercise.deleteMany({
-    where: { slug: { notIn: imported.map((e) => e.slug) }, entries: { none: {} } },
+    // userId: null → uniquement le catalogue ; les exercices personnalisés ne sont jamais touchés.
+    where: { userId: null, slug: { notIn: imported.map((e) => e.slug) }, entries: { none: {} } },
   });
   console.log(`✓ ${imported.length} exercices, ${count} anciens supprimés`);
 }

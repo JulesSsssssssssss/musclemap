@@ -17,7 +17,7 @@ export async function GET() {
   });
 
   const escape = (v: string) => (/[",;\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v);
-  const rows = [["date", "seance", "exercice", "equipement", "muscle", "serie", "poids_kg", "reps", "validee"]];
+  const rows = [["date", "seance", "exercice", "equipement", "muscle", "serie", "poids_kg", "reps", "validee", "type", "rpe", "note"]];
 
   for (const w of workouts) {
     for (const entry of w.entries) {
@@ -32,6 +32,9 @@ export async function GET() {
           String(set.weight),
           String(set.reps),
           set.done ? "oui" : "non",
+          set.kind === "warmup" ? "echauffement" : "travail",
+          set.rpe === null ? "" : String(set.rpe),
+          set.note ?? "",
         ]);
       }
     }

@@ -21,6 +21,9 @@ model User {
   workouts Workout[]
   records  PersonalRecord[]
   body     BodyEntry[]
+
+  exercises Exercise[]
+  favorites Favorite[]
 }
 
 /// Relevé corporel : poids (kg), mensurations (cm) et photo de progression (JPEG réduit côté client).
@@ -58,10 +61,26 @@ model Exercise {
   sourceUrl        String?
   popularity       Int    @default(0)
 
-  entries WorkoutExercise[]
-  records PersonalRecord[]
+  /// Renseigné pour un exercice personnalisé (visible par son auteur seulement) ; null = catalogue.
+  userId String?
+  user   User?   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  entries   WorkoutExercise[]
+  records   PersonalRecord[]
+  favorites Favorite[]
 
   @@index([muscle, subCode])
+  @@index([userId])
+}
+
+model Favorite {
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  exerciseId String
+  exercise   Exercise @relation(fields: [exerciseId], references: [id], onDelete: Cascade)
+  createdAt  DateTime @default(now())
+
+  @@id([userId, exerciseId])
 }
 
 model Workout {
@@ -89,6 +108,8 @@ model WorkoutExercise {
   exercise   Exercise @relation(fields: [exerciseId], references: [id])
   position   Int
   note       String?
+  /// Enchaîné avec l'exercice précédent (superset) : pas de repos entre les deux.
+  superset   Boolean  @default(false)
 
   sets WorkoutSet[]
 
@@ -103,6 +124,11 @@ model WorkoutSet {
   weight   Float           @default(0)
   reps     Int             @default(0)
   done     Boolean         @default(false)
+  /// « work » (série de travail) ou « warmup » (échauffement, exclu du volume et des records).
+  kind     String          @default("work")
+  /// Effort perçu, de 6 à 10.
+  rpe      Float?
+  note     String?
 
   @@index([entryId])
 }

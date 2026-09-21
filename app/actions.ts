@@ -4,9 +4,12 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { createSession, destroySession, hashPassword, requireUser, verifyPassword } from "@/lib/auth";
-import { computeWorkoutBests, previousSets } from "@/lib/queries";
-import { suggestSets } from "@/lib/progression";
+import { computeWorkoutBests, previousSets, visibleTo } from "@/lib/queries";
+import { nextWarmup, scaleWarmups, suggestSets } from "@/lib/progression";
 import { fromUnit } from "@/lib/format";
+import { proposeWorkout } from "@/lib/generator";
+import { MUSCLES, type MuscleKey } from "@/lib/body";
+import { EQUIPMENTS, subsFor } from "@/lib/catalog";
 
 export type FormState = { error?: string } | undefined;
 
@@ -56,6 +59,12 @@ async function ownWorkout(userId: string, id: string) {
   return prisma.workout.findFirst({ where: { id, userId, status: { not: "template" } } });
 }
 
+type SetSeed = { weight: number; reps: number; kind?: string };
+
+/** Lignes de séries à créer : positions consécutives, séries non validées. */
+const setRows = (sets: SetSeed[]) =>
+  sets.map((s, i) => ({ position: i, weight: s.weight, reps: s.reps, kind: s.kind ?? "work", done: false }));
+
 const DAYS = ["dimanche", "lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi"];
 const defaultName = () => `Séance ${DAYS[new Date().getDay()]}`;
 
@@ -104,7 +113,7 @@ export async function saveAsRoutine(formData: FormData) {
   const entries = source.entries
     .map((e) => {
       const done = e.sets.filter((s) => s.done);
-      return { exerciseId: e.exerciseId, sets: done.length ? done : e.sets };
+      return { exerciseId: e.exerciseId, superset: e.superset, sets: done.length ? done : e.sets };
     })
     .filter((e) => e.sets.length > 0);
   if (entries.length === 0) redirect(`/seance/${source.id}`);
@@ -118,7 +127,8 @@ export async function saveAsRoutine(formData: FormData) {
         create: entries.map((e, position) => ({
           exerciseId: e.exerciseId,
           position,
-          sets: { create: e.sets.map((s, i) => ({ position: i, weight: s.weight, reps: s.reps, done: false })) },
+          superset: position > 0 && e.superset,
+          sets: { create: setRows(e.sets) },
         })),
       },
     },
@@ -147,15 +157,27 @@ export async function startFromRoutine(formData: FormData) {
       status: "planned",
       entries: {
         create: routine.entries.map((e, position) => {
+          const warmups = e.sets.filter((s) => s.kind === "warmup");
+          const work = e.sets.filter((s) => s.kind !== "warmup");
           const last = previous[e.exerciseId];
-          const sets = last?.length
-            ? suggestSets(last, e.exercise.scheme, e.sets.length).sets
-            : e.sets.map((s) => ({ weight: s.weight, reps: s.reps }));
+
+          // Séries de travail d'après la dernière performance ; échauffements recalés dessus.
+          const nextWork = last?.length
+            ? suggestSets(last, e.exercise.scheme, work.length || undefined).sets
+            : work.map((s) => ({ weight: s.weight, reps: s.reps }));
+          const nextWarm = scaleWarmups(warmups, work[0]?.weight ?? 0, nextWork[0]?.weight ?? 0);
+
           return {
             exerciseId: e.exerciseId,
             position,
             note: e.note,
-            sets: { create: sets.map((s, i) => ({ position: i, weight: s.weight, reps: s.reps, done: false })) },
+            superset: e.superset,
+            sets: {
+              create: setRows([
+                ...nextWarm.map((s) => ({ ...s, kind: "warmup" })),
+                ...nextWork.map((s) => ({ ...s, kind: "work" })),
+              ]),
+            },
           };
         }),
       },
@@ -193,7 +215,7 @@ export async function addExerciseToWorkout(
   target: { workoutId: string } | { newName: string },
 ): Promise<AddResult | null> {
   const user = await requireUser();
-  const exercise = await prisma.exercise.findUnique({ where: { slug } });
+  const exercise = await prisma.exercise.findFirst({ where: { slug, ...visibleTo(user.id) } });
   if (!exercise) return null;
 
   const workout =
@@ -215,7 +237,7 @@ export async function addExerciseToWorkout(
       workoutId: workout.id,
       exerciseId: exercise.id,
       position: count,
-      sets: { create: template.map((s, i) => ({ position: i, weight: s.weight, reps: s.reps, done: false })) },
+      sets: { create: setRows(template) },
     },
   });
 
@@ -251,10 +273,42 @@ export async function addSet(formData: FormData) {
     include: { sets: { orderBy: { position: "asc" } } },
   });
   if (!entry) return;
-  const last = entry.sets.at(-1);
+  const last = entry.sets.filter((s) => s.kind === "work").at(-1);
   await prisma.workoutSet.create({
     data: { entryId, position: entry.sets.length, weight: last?.weight ?? 0, reps: last?.reps ?? 10 },
   });
+  revalidatePath("/seance");
+}
+
+/** Insère une série d'échauffement avant les séries de travail (50 %, puis 70 %, puis 85 %). */
+export async function addWarmup(formData: FormData) {
+  const user = await requireUser();
+  const entryId = String(formData.get("entryId") ?? "");
+  const entry = await prisma.workoutExercise.findFirst({
+    where: { id: entryId, workout: { userId: user.id } },
+    include: { sets: { orderBy: { position: "asc" } } },
+  });
+  if (!entry) return;
+
+  const warmups = entry.sets.filter((s) => s.kind === "warmup").length;
+  const top = entry.sets.find((s) => s.kind === "work")?.weight ?? 0;
+  const next = nextWarmup(warmups, top);
+
+  await prisma.$transaction([
+    prisma.workoutSet.updateMany({ where: { entryId, position: { gte: warmups } }, data: { position: { increment: 1 } } }),
+    prisma.workoutSet.create({ data: { entryId, position: warmups, weight: next.weight, reps: next.reps, kind: "warmup" } }),
+  ]);
+  revalidatePath("/seance");
+}
+
+/** Enchaîne (ou détache) un exercice avec le précédent : superset. */
+export async function toggleSuperset(formData: FormData) {
+  const user = await requireUser();
+  const entry = await prisma.workoutExercise.findFirst({
+    where: { id: String(formData.get("entryId") ?? ""), workout: { userId: user.id } },
+  });
+  if (!entry || entry.position === 0) return;
+  await prisma.workoutExercise.update({ where: { id: entry.id }, data: { superset: !entry.superset } });
   revalidatePath("/seance");
 }
 
@@ -267,8 +321,17 @@ export async function removeSet(formData: FormData) {
   revalidatePath("/seance");
 }
 
-/** Met à jour poids / reps / validation d'une série. */
-export async function updateSet(input: { setId: string; weight?: number; reps?: number; done?: boolean }) {
+/** Met à jour poids / reps / validation, et type / RPE / note d'une série. */
+export async function updateSet(input: {
+  setId: string;
+  weight?: number;
+  reps?: number;
+  done?: boolean;
+  kind?: "work" | "warmup";
+  /** Effort perçu de 6 à 10 ; `null` l'efface. */
+  rpe?: number | null;
+  note?: string | null;
+}) {
   const user = await requireUser();
   const set = await prisma.workoutSet.findFirst({
     where: { id: input.setId, entry: { workout: { userId: user.id } } },
@@ -281,6 +344,9 @@ export async function updateSet(input: { setId: string; weight?: number; reps?: 
       weight: input.weight ?? undefined,
       reps: input.reps ?? undefined,
       done: input.done ?? undefined,
+      kind: input.kind === "warmup" || input.kind === "work" ? input.kind : undefined,
+      rpe: input.rpe === null ? null : input.rpe !== undefined && input.rpe >= 6 && input.rpe <= 10 ? input.rpe : undefined,
+      note: input.note === null ? null : typeof input.note === "string" ? input.note.trim().slice(0, 140) || null : undefined,
     },
   });
   revalidatePath("/seance");
@@ -316,7 +382,8 @@ export async function finishWorkout(formData: FormData) {
   });
   if (!workout) redirect("/seance");
 
-  const doneSets = workout.entries.flatMap((e) => e.sets.filter((s) => s.done));
+  // Les échauffements ne comptent ni dans le volume ni dans les records.
+  const doneSets = workout.entries.flatMap((e) => e.sets.filter((s) => s.done && s.kind === "work"));
   const volume = doneSets.reduce((a, s) => a + s.weight * s.reps, 0);
   const durationSec = Math.max(0, Math.round(elapsed)) || Math.round((Date.now() - workout.startedAt.getTime()) / 1000);
 
@@ -330,7 +397,8 @@ export async function finishWorkout(formData: FormData) {
   });
 
   // Mise à jour des records personnels.
-  for (const best of computeWorkoutBests(workout.entries)) {
+  const workEntries = workout.entries.map((e) => ({ ...e, sets: e.sets.filter((s) => s.kind === "work") }));
+  for (const best of computeWorkoutBests(workEntries)) {
     for (const kind of ["weight", "reps", "volume", "e1rm"] as const) {
       const value = best[kind];
       if (!value) continue;
@@ -350,6 +418,110 @@ export async function finishWorkout(formData: FormData) {
   revalidatePath("/seance");
   revalidatePath("/progression");
   redirect(`/seance/${workout.id}/resume`);
+}
+
+/* ── Favoris et exercices personnalisés ───────────────────────────────────── */
+
+/** Ajoute ou retire un exercice des favoris ; renvoie le nouvel état. */
+export async function toggleFavorite(exerciseId: string): Promise<boolean> {
+  const user = await requireUser();
+  const key = { userId_exerciseId: { userId: user.id, exerciseId } };
+  const existing = await prisma.favorite.findUnique({ where: key });
+  if (existing) {
+    await prisma.favorite.delete({ where: key });
+  } else if (await prisma.exercise.findFirst({ where: { id: exerciseId, ...visibleTo(user.id) }, select: { id: true } })) {
+    await prisma.favorite.create({ data: { userId: user.id, exerciseId } });
+  } else {
+    return false;
+  }
+  revalidatePath("/biblio");
+  return !existing;
+}
+
+const MAX_CUSTOM_EXERCISES = 100;
+
+const slugify = (s: string) =>
+  s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 50);
+
+/** Crée un exercice personnalisé, visible de son auteur seulement. */
+export async function createExercise(_: FormState, formData: FormData): Promise<FormState> {
+  const user = await requireUser();
+
+  const name = String(formData.get("name") ?? "").trim().replace(/\s+/g, " ");
+  const muscle = String(formData.get("muscle") ?? "") as MuscleKey;
+  const subCode = String(formData.get("subCode") ?? "");
+  const equipment = String(formData.get("equipment") ?? "").toUpperCase();
+  const description = String(formData.get("description") ?? "").trim().slice(0, 600);
+
+  if (name.length < 2 || name.length > 80) return { error: "Donne un nom de 2 à 80 caractères." };
+  if (!(muscle in MUSCLES)) return { error: "Choisis un groupe musculaire." };
+  const subs = subsFor(muscle);
+  const sub = subs.find((s) => s.code === subCode) ?? subs[0];
+  if (!EQUIPMENTS.slice(1).some((e) => e.toUpperCase() === equipment)) return { error: "Choisis un équipement." };
+
+  if ((await prisma.exercise.count({ where: { userId: user.id } })) >= MAX_CUSTOM_EXERCISES) {
+    return { error: `Tu as atteint la limite de ${MAX_CUSTOM_EXERCISES} exercices personnalisés.` };
+  }
+
+  const slug = `perso-${slugify(name) || "exercice"}-${Math.random().toString(36).slice(2, 8)}`;
+  await prisma.exercise.create({
+    data: {
+      slug, name, equipment, muscle, subCode: sub.code, primaryMuscle: MUSCLES[muscle],
+      level: "—", description: description || null, userId: user.id,
+    },
+  });
+  revalidatePath("/biblio");
+  redirect(`/exercice/${slug}`);
+}
+
+/** Supprime un exercice personnalisé — refusé s'il apparaît déjà dans une séance. */
+export async function deleteExercise(formData: FormData) {
+  const user = await requireUser();
+  const exercise = await prisma.exercise.findFirst({
+    where: { id: String(formData.get("exerciseId") ?? ""), userId: user.id },
+    include: { _count: { select: { entries: true } } },
+  });
+  if (!exercise) redirect("/biblio");
+  if (exercise._count.entries > 0) redirect(`/exercice/${exercise.slug}?utilise=1`);
+  await prisma.exercise.delete({ where: { id: exercise.id } });
+  revalidatePath("/biblio");
+  redirect("/biblio");
+}
+
+/* ── Générateur de séance ─────────────────────────────────────────────────── */
+
+/** Propose une séance (rien n'est créé) — le même `seed` redonne la même proposition. */
+export async function previewWorkout(input: { muscles: string[]; minutes: number; seed: number }) {
+  const user = await requireUser();
+  const minutes = [30, 45, 60, 90].includes(input.minutes) ? input.minutes : 60;
+  return proposeWorkout(user.id, { muscles: input.muscles, minutes, seed: Math.floor(input.seed) || 1 });
+}
+
+/** Crée une séance à venir avec les exercices retenus, pré-remplie d'après tes dernières performances. */
+export async function createGeneratedWorkout(input: { slugs: string[]; name: string }) {
+  const user = await requireUser();
+  const slugs = [...new Set(input.slugs)].slice(0, 12);
+  const found = await prisma.exercise.findMany({ where: { slug: { in: slugs }, ...visibleTo(user.id) } });
+  const exercises = slugs.flatMap((s) => found.find((e) => e.slug === s) ?? []);
+  if (exercises.length === 0) return { error: "Aucun exercice à ajouter." };
+
+  const previous = await previousSets(user.id, exercises.map((e) => e.id));
+  const workout = await prisma.workout.create({
+    data: {
+      userId: user.id,
+      name: input.name.trim().slice(0, 60) || defaultName(),
+      status: "planned",
+      entries: {
+        create: exercises.map((e, position) => ({
+          exerciseId: e.id,
+          position,
+          sets: { create: setRows(suggestSets(previous[e.id] ?? [], e.scheme).sets) },
+        })),
+      },
+    },
+  });
+  revalidatePath("/seance");
+  redirect(`/seance/${workout.id}`);
 }
 
 /* ── Suivi corporel ───────────────────────────────────────────────────────── */

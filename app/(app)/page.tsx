@@ -5,7 +5,7 @@ import { countOpenWorkouts, exerciseCounts, muscleVolume } from "@/lib/queries";
 export default async function HomePage() {
   const user = await requireUser();
   const [{ byMuscle }, open, volume] = await Promise.all([
-    exerciseCounts(),
+    exerciseCounts(user.id),
     countOpenWorkouts(user.id),
     muscleVolume(user.id),
   ]);

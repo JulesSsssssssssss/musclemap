@@ -3,6 +3,9 @@ import { notFound } from "next/navigation";
 import { BodySilhouette, type Highlight } from "@/components/body/BodySilhouette";
 import { ExerciseGuide } from "@/components/ExerciseGuide";
 import { AddToWorkout } from "@/components/AddToWorkout";
+import { FavoriteButton } from "@/components/FavoriteButton";
+import { deleteExercise } from "@/app/actions";
+import { prisma } from "@/lib/prisma";
 import { IconBack } from "@/components/Icons";
 import { FRONT_MUSCLES, MUSCLES, type MuscleKey } from "@/lib/body";
 import { muscleFromLabel } from "@/lib/catalog";
@@ -11,11 +14,20 @@ import { getExercise, lastPerformance, parseGuide, parseSecondary } from "@/lib/
 import { dec, dayMonth } from "@/lib/format";
 
 
-export default async function ExercisePage({ params }: { params: Promise<{ slug: string }> }) {
+export default async function ExercisePage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ slug: string }>;
+  searchParams: Promise<{ utilise?: string }>;
+}) {
   const user = await requireUser();
   const { slug } = await params;
-  const exercise = await getExercise(slug);
+  const { utilise } = await searchParams;
+  const exercise = await getExercise(slug, user.id);
   if (!exercise) notFound();
+  const isFavorite = Boolean(await prisma.favorite.findUnique({ where: { userId_exerciseId: { userId: user.id, exerciseId: exercise.id } } }));
+  const custom = exercise.userId === user.id;
 
   const secondary = parseSecondary(exercise.secondaryMuscles);
   const guide = parseGuide(exercise.guide);
@@ -52,7 +64,10 @@ export default async function ExercisePage({ params }: { params: Promise<{ slug:
       </div>
 
       <div style={{ padding: "18px 20px 0" }}>
-        <h1 style={{ margin: "0 0 10px", font: "700 26px/1.15 var(--sans)", letterSpacing: "-.8px" }}>{exercise.name}</h1>
+        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12, margin: "0 0 10px" }}>
+          <h1 style={{ margin: 0, font: "700 26px/1.15 var(--sans)", letterSpacing: "-.8px" }}>{exercise.name}</h1>
+          <FavoriteButton exerciseId={exercise.id} initial={isFavorite} name={exercise.name} />
+        </div>
         <div style={{ display: "flex", gap: 7, flexWrap: "wrap", marginBottom: 18 }}>
           <span style={{ font: "500 11px var(--mono)", color: "var(--dim)", padding: "6px 10px", borderRadius: 8, background: "var(--surf2)" }}>
             {exercise.equipment}
@@ -86,6 +101,23 @@ export default async function ExercisePage({ params }: { params: Promise<{ slug:
           </span>
         </div>
       </section>
+
+      {custom && (
+        <section style={{ margin: "0 20px 14px", padding: "14px 16px", borderRadius: 20, background: "var(--surf)", border: "1px solid var(--hair)", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 3, minWidth: 0 }}>
+            <span className="eyebrow" style={{ letterSpacing: "1.4px", color: "var(--acc)" }}>EXERCICE PERSONNALISÉ</span>
+            <span style={{ font: "400 12px/1.4 var(--sans)", color: utilise ? "#FF8A6B" : "var(--mut)" }}>
+              {utilise ? "Déjà utilisé dans une séance : il ne peut plus être supprimé." : "Visible par toi seul."}
+            </span>
+          </div>
+          <form action={deleteExercise}>
+            <input type="hidden" name="exerciseId" value={exercise.id} />
+            <button type="submit" style={{ minHeight: 44, padding: "0 14px", borderRadius: 13, background: "var(--surf2)", border: "1px solid var(--hair2)", color: "var(--acc)", font: "600 12px var(--sans)", cursor: "pointer" }}>
+              Supprimer
+            </button>
+          </form>
+        </section>
+      )}
 
       {exercise.sourceUrl && (
         <p style={{ margin: "0 20px 14px", font: "400 11px/1.5 var(--sans)", color: "var(--ghost)" }}>

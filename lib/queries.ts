@@ -33,10 +33,14 @@ export function getWorkout(userId: string, id: string) {
   return prisma.workout.findFirst({ where: { id, userId }, include: workoutInclude });
 }
 
+/** Exercices visibles par un utilisateur : le catalogue + les siens. */
+export const visibleTo = (userId: string) => ({ OR: [{ userId: null }, { userId }] });
+
 /** Nombre d'exercices par groupe musculaire et par faisceau. */
-export async function exerciseCounts() {
+export async function exerciseCounts(userId: string) {
   const rows = await prisma.exercise.groupBy({
     by: ["muscle", "subCode"],
+    where: visibleTo(userId),
     _count: { _all: true },
   });
   const byMuscle: Record<string, number> = {};
@@ -49,17 +53,20 @@ export async function exerciseCounts() {
 }
 
 export function listExercises(opts: {
+  userId: string;
   muscle?: string;
   subCode?: string;
   equipment?: string;
   search?: string;
+  favoritesOnly?: boolean;
   take?: number;
 }) {
-  const where: Record<string, unknown> = {};
+  const where: Record<string, unknown> = { ...visibleTo(opts.userId) };
   if (opts.muscle) where.muscle = opts.muscle;
   if (opts.subCode) where.subCode = opts.subCode;
   if (opts.equipment) where.equipment = opts.equipment.toUpperCase();
   if (opts.search) where.name = { contains: opts.search, mode: "insensitive" };
+  if (opts.favoritesOnly) where.favorites = { some: { userId: opts.userId } };
   return prisma.exercise.findMany({
     where,
     orderBy: [{ popularity: "desc" }, { name: "asc" }],
@@ -67,8 +74,34 @@ export function listExercises(opts: {
   });
 }
 
-export function getExercise(slug: string) {
-  return prisma.exercise.findUnique({ where: { slug } });
+/** Un exercice du catalogue, ou un exercice personnalisé de cet utilisateur. */
+export function getExercise(slug: string, userId: string) {
+  return prisma.exercise.findFirst({ where: { slug, ...visibleTo(userId) } });
+}
+
+/** Identifiants des exercices favoris. */
+export async function favoriteIds(userId: string) {
+  const rows = await prisma.favorite.findMany({ where: { userId }, select: { exerciseId: true } });
+  return new Set(rows.map((r) => r.exerciseId));
+}
+
+/** Exercices travaillés le plus récemment (séances terminées ou en cours). */
+export async function recentExercises(userId: string, take = 8) {
+  const rows = await prisma.workoutExercise.findMany({
+    where: { workout: { userId, status: { in: ["done", "active"] } } },
+    orderBy: { workout: { startedAt: "desc" } },
+    select: { exercise: true },
+    take: 60,
+  });
+  const seen = new Set<string>();
+  const out = [];
+  for (const r of rows) {
+    if (seen.has(r.exercise.id)) continue;
+    seen.add(r.exercise.id);
+    out.push(r.exercise);
+    if (out.length === take) break;
+  }
+  return out;
 }
 
 export function parseGuide(raw: string): Guide {
@@ -94,7 +127,7 @@ export async function lastPerformance(userId: string, exerciseId: string) {
   const entry = await prisma.workoutExercise.findFirst({
     where: { exerciseId, workout: { userId, status: "done" } },
     orderBy: { workout: { startedAt: "desc" } },
-    include: { workout: true, sets: { where: { done: true }, orderBy: { position: "asc" } } },
+    include: { workout: true, sets: { where: { done: true, kind: "work" }, orderBy: { position: "asc" } } },
   });
   if (!entry || entry.sets.length === 0) return null;
   const top = entry.sets.reduce((a, b) => (b.weight > a.weight ? b : a));
@@ -123,7 +156,7 @@ export async function progressionSeries(userId: string, exerciseId: string, mont
   const entries = await prisma.workoutExercise.findMany({
     where: { exerciseId, workout: { userId, status: "done", startedAt: { gte: since } } },
     orderBy: { workout: { startedAt: "asc" } },
-    include: { workout: { select: { startedAt: true } }, sets: { where: { done: true } } },
+    include: { workout: { select: { startedAt: true } }, sets: { where: { done: true, kind: "work" } } },
   });
 
   return entries
@@ -172,7 +205,7 @@ export async function muscleDistribution(userId: string, months: number) {
 
   const entries = await prisma.workoutExercise.findMany({
     where: { workout: { userId, status: "done", startedAt: { gte: since } } },
-    include: { exercise: { select: { muscle: true } }, sets: { where: { done: true } } },
+    include: { exercise: { select: { muscle: true } }, sets: { where: { done: true, kind: "work" } } },
   });
 
   const volume: Partial<Record<MuscleKey, number>> = {};
@@ -237,7 +270,7 @@ export async function muscleVolume(userId: string) {
     select: {
       exercise: { select: { muscle: true } },
       workout: { select: { startedAt: true } },
-      sets: { where: { done: true }, select: { id: true } },
+      sets: { where: { done: true, kind: "work" }, select: { id: true } },
     },
   });
 
@@ -282,7 +315,7 @@ export async function previousSets(userId: string, exerciseIds: string[]) {
   const entries = await prisma.workoutExercise.findMany({
     where: { exerciseId: { in: exerciseIds }, workout: { userId, status: "done" } },
     orderBy: { workout: { startedAt: "desc" } },
-    include: { sets: { where: { done: true }, orderBy: { position: "asc" } } },
+    include: { sets: { where: { done: true, kind: "work" }, orderBy: { position: "asc" } } },
   });
 
   const out: Record<string, { weight: number; reps: number }[]> = {};

@@ -38,6 +38,16 @@ export default async function SessionsPage() {
         </button>
       </form>
 
+      <div style={{ padding: "0 20px 18px" }}>
+        <Link
+          href="/seance/generer"
+          className="tap"
+          style={{ minHeight: 52, borderRadius: 16, background: "rgba(255,91,30,.1)", border: "1px solid rgba(255,91,30,.28)", color: "var(--acc)", font: "600 14px var(--sans)", display: "grid", placeItems: "center" }}
+        >
+          ✨ Générer une séance
+        </Link>
+      </div>
+
       {routines.length > 0 && (
         <section style={{ padding: "0 20px 18px" }}>
           <h2 className="eyebrow" style={{ margin: "0 0 10px", letterSpacing: "1.6px" }}>MES ROUTINES</h2>
