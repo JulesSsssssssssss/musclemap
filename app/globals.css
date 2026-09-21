@@ -181,6 +181,17 @@ button:focus-visible, a:focus-visible, input:focus-visible {
   padding: 0 15px;
 }
 .field::placeholder { color: var(--faint); }
+/* iOS Safari garde sinon la largeur intrinsèque du sélecteur de date et déborde de sa colonne. */
+.field[type="date"] {
+  -webkit-appearance: none;
+  appearance: none;
+  display: block;
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
+  text-align: left;
+}
+.field[type="date"]::-webkit-date-and-time-value { text-align: left; }
 
 .skeleton {
   height: 104px;
