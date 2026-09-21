@@ -12,7 +12,17 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
   );
 }
 
-export function SettingsRows({ unit, restSeconds, theme }: { unit: string; restSeconds: number; theme: string }) {
+export function SettingsRows({
+  unit,
+  restSeconds,
+  theme,
+  sessionsPerWeek,
+}: {
+  unit: string;
+  restSeconds: number;
+  theme: string;
+  sessionsPerWeek: number;
+}) {
   const [pending, start] = useTransition();
 
   const save = (patch: Record<string, string | number>) =>
@@ -21,6 +31,7 @@ export function SettingsRows({ unit, restSeconds, theme }: { unit: string; restS
       data.set("unit", String(patch.unit ?? unit));
       data.set("restSeconds", String(patch.restSeconds ?? restSeconds));
       data.set("theme", String(patch.theme ?? theme));
+      data.set("sessionsPerWeek", String(patch.sessionsPerWeek ?? sessionsPerWeek));
       await updateSettings(data);
     });
 
@@ -66,6 +77,28 @@ export function SettingsRows({ unit, restSeconds, theme }: { unit: string; restS
         >
           <span style={{ width: 26, height: 26, borderRadius: 13, background: dark ? "var(--ink)" : "var(--faint)", display: "block" }} />
         </button>
+      </Row>
+
+      <Row label="Objectif hebdo">
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <button
+            onClick={() => save({ sessionsPerWeek: Math.max(1, sessionsPerWeek - 1) })}
+            aria-label="Diminuer l'objectif"
+            style={{ width: 36, height: 36, borderRadius: 10, background: "var(--surf2)", border: "1px solid var(--hair)", color: "var(--dim)", cursor: "pointer", font: "600 15px var(--sans)" }}
+          >
+            −
+          </button>
+          <span style={{ font: "600 13px var(--mono)", color: "var(--acc)", minWidth: 64, textAlign: "center" }}>
+            {sessionsPerWeek} / sem.
+          </span>
+          <button
+            onClick={() => save({ sessionsPerWeek: Math.min(7, sessionsPerWeek + 1) })}
+            aria-label="Augmenter l'objectif"
+            style={{ width: 36, height: 36, borderRadius: 10, background: "var(--surf2)", border: "1px solid var(--hair)", color: "var(--dim)", cursor: "pointer", font: "600 15px var(--sans)" }}
+          >
+            +
+          </button>
+        </div>
       </Row>
 
       <Row label="Minuteur de repos">

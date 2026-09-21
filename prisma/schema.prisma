@@ -20,6 +20,25 @@ model User {
 
   workouts Workout[]
   records  PersonalRecord[]
+  body     BodyEntry[]
+}
+
+/// Relevé corporel : poids (kg), mensurations (cm) et photo de progression (JPEG réduit côté client).
+model BodyEntry {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  date      DateTime @default(now())
+  weight    Float?
+  chest     Float?
+  waist     Float?
+  hips      Float?
+  arm       Float?
+  thigh     Float?
+  photo     Bytes?
+  photoType String?
+
+  @@index([userId, date])
 }
 
 model Exercise {
