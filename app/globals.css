@@ -185,13 +185,21 @@ button:focus-visible, a:focus-visible, input:focus-visible {
 .field[type="date"] {
   -webkit-appearance: none;
   appearance: none;
-  display: block;
+  /* Sans apparence native, iOS colle la valeur en haut du champ : on la centre à la main. */
+  display: flex;
+  align-items: center;
   min-width: 0;
   max-width: 100%;
   box-sizing: border-box;
   text-align: left;
 }
-.field[type="date"]::-webkit-date-and-time-value { text-align: left; }
+.field[type="date"]::-webkit-date-and-time-value {
+  text-align: left;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  line-height: normal;
+}
 
 .skeleton {
   height: 104px;
