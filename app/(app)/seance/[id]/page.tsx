@@ -23,6 +23,8 @@ export default async function WorkoutPage({ params }: { params: Promise<{ id: st
     return {
       id: entry.id,
       name: entry.exercise.name,
+      slug: entry.exercise.slug,
+      image: entry.exercise.image,
       meta: `${entry.exercise.equipment} · ${entry.exercise.primaryMuscle.toUpperCase()}`,
       note: entry.note,
       superset: entry.superset,

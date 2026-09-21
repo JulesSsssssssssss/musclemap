@@ -26,6 +26,9 @@ export type SessionSet = {
 export type SessionEntry = {
   id: string;
   name: string;
+  /** Fiche de l'exercice et image de démonstration (absente pour un exercice personnalisé). */
+  slug: string;
+  image: string | null;
   meta: string;
   note: string | null;
   /** Enchaîné avec l'exercice précédent. */
@@ -349,7 +352,19 @@ export function SessionScreen({
                   <span style={{ width: 14, height: 1.5, background: "#3D3933" }} />
                   <span style={{ width: 14, height: 1.5, background: "#3D3933" }} />
                 </span>
-                <div className="gif" style={{ width: 44, height: 44, flex: "none", borderRadius: 13 }} />
+                <div className="gif" style={{ width: 52, height: 52, flex: "none", borderRadius: 14, overflow: "hidden" }}>
+                  {entry.image && (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={entry.image.replace(".webp", "-thumb.webp")}
+                      alt=""
+                      width={52}
+                      height={52}
+                      loading="lazy"
+                      style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
+                    />
+                  )}
+                </div>
                 <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 3 }}>
                   <span style={{ font: "600 14px var(--sans)", color: "var(--txt)" }}>{entry.name}</span>
                   <span style={{ font: "500 11px var(--mono)", color: "var(--mut)" }}>
@@ -378,6 +393,27 @@ export function SessionScreen({
 
               {isOpen && (
                 <div style={{ padding: "0 14px 14px" }}>
+                  {entry.image && (
+                    <Link
+                      href={`/exercice/${entry.slug}`}
+                      aria-label={`Voir la fiche : ${entry.name}`}
+                      style={{ display: "block", marginBottom: 12, borderRadius: 16, overflow: "hidden", background: "#fff", position: "relative" }}
+                    >
+                      {/* Démonstration sur fond blanc, comme sur la fiche de l'exercice. */}
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={entry.image}
+                        alt={`Démonstration : ${entry.name}`}
+                        width={360}
+                        height={360}
+                        loading="lazy"
+                        style={{ display: "block", margin: "0 auto", width: "min(100%, 240px)", height: "auto", aspectRatio: "1 / 1", objectFit: "contain" }}
+                      />
+                      <span style={{ position: "absolute", right: 8, bottom: 8, padding: "4px 9px", borderRadius: 8, background: "rgba(10,11,10,.72)", color: "#fff", font: "600 11px var(--sans)" }}>
+                        Fiche →
+                      </span>
+                    </Link>
+                  )}
                   <div style={{ display: "grid", gridTemplateColumns: "34px 1fr 74px 62px 44px", gap: 6, padding: "0 2px 8px" }}>
                     {["SÉR", "PRÉCÉDENT", unit.toUpperCase(), "REPS"].map((h) => (
                       <span key={h} style={{ font: "500 9px var(--mono)", letterSpacing: 1, color: "var(--ghost)" }}>{h}</span>
