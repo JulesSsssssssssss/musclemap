@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useState, useTransition } from "react";
+import { createPortal } from "react-dom";
 import { addExerciseToWorkout, listEditableWorkouts, type AddResult, type EditableWorkout } from "@/app/actions";
 import { IconCheck } from "./Icons";
 
@@ -60,17 +61,17 @@ export function AddToWorkout({
         </button>
       )}
 
-      {open && (
+      {open && createPortal(
         <div
           role="dialog"
           aria-modal="true"
           aria-label="Choisir la séance"
           onClick={() => setOpen(false)}
-          style={{ position: "fixed", inset: 0, zIndex: 20, background: "rgba(0,0,0,.6)", display: "flex", alignItems: "flex-end", justifyContent: "center" }}
+          style={{ position: "fixed", inset: 0, zIndex: 100, background: "rgba(0,0,0,.6)", display: "flex", alignItems: "flex-end", justifyContent: "center" }}
         >
           <div
             onClick={(e) => e.stopPropagation()}
-            style={{ width: "100%", maxWidth: 520, maxHeight: "80dvh", overflowY: "auto", padding: "20px 20px calc(20px + env(safe-area-inset-bottom))", borderRadius: "24px 24px 0 0", background: "var(--surf)", border: "1px solid var(--hair2)", display: "flex", flexDirection: "column", gap: 10 }}
+            style={{ width: "100%", maxWidth: 520, maxHeight: "85dvh", overflowY: "auto", padding: "20px 20px calc(20px + env(safe-area-inset-bottom))", borderRadius: "24px 24px 0 0", background: "var(--surf)", border: "1px solid var(--hair2)", display: "flex", flexDirection: "column", gap: 10 }}
           >
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
               <h2 style={{ margin: 0, font: "700 18px var(--sans)" }}>Ajouter à…</h2>
@@ -105,7 +106,8 @@ export function AddToWorkout({
               </button>
             </form>
           </div>
-        </div>
+        </div>,
+        document.body,
       )}
 
       {toast && <AddedToast result={toast} />}
