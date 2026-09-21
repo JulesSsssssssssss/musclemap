@@ -10,6 +10,7 @@ export type SessionSet = { id: string; weight: number; reps: number; done: boole
 export type SessionEntry = {
   id: string;
   name: string;
+  image: string | null;
   meta: string;
   note: string | null;
   sets: SessionSet[];
@@ -154,7 +155,12 @@ export function SessionScreen({
                   <span style={{ width: 14, height: 1.5, background: "#3D3933" }} />
                   <span style={{ width: 14, height: 1.5, background: "#3D3933" }} />
                 </span>
-                <div className="gif" style={{ width: 44, height: 44, flex: "none", borderRadius: 13 }} />
+                <div className="gif" style={{ width: 44, height: 44, flex: "none", borderRadius: 13, overflow: "hidden" }}>
+                  {entry.image && (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={entry.image.replace(".webp", "-thumb.webp")} alt="" width={44} height={44} loading="lazy" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
+                  )}
+                </div>
                 <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 3 }}>
                   <span style={{ font: "600 14px var(--sans)", color: "var(--txt)" }}>{entry.name}</span>
                   <span style={{ font: "500 11px var(--mono)", color: "var(--mut)" }}>{entry.meta}</span>

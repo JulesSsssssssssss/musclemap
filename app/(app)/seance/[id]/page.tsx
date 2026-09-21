@@ -18,6 +18,7 @@ export default async function WorkoutPage({ params }: { params: Promise<{ id: st
   const entries: SessionEntry[] = workout.entries.map((entry) => ({
     id: entry.id,
     name: entry.exercise.name,
+    image: entry.exercise.image,
     meta: `${entry.exercise.equipment} · ${entry.exercise.primaryMuscle.toUpperCase()}`,
     note: entry.note,
     sets: entry.sets.map((set, i) => {
