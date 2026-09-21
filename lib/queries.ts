@@ -1,6 +1,7 @@
 import "server-only";
 import { prisma } from "./prisma";
 import { e1rm } from "./format";
+import { weeklyGoal } from "./goal";
 import type { MuscleKey } from "./body";
 import type { Guide } from "./catalog";
 
@@ -129,9 +130,39 @@ export async function progressionSeries(userId: string, exerciseId: string, mont
     .map((e) => ({
       date: e.workout.startedAt,
       max: e.sets.reduce((a, s) => Math.max(a, s.weight), 0),
+      e1rm: e.sets.reduce((a, s) => Math.max(a, e1rm(s.weight, s.reps)), 0),
       volume: e.sets.reduce((a, s) => a + s.weight * s.reps, 0),
     }))
     .filter((p) => p.max > 0);
+}
+
+/** Objectif hebdomadaire et série de semaines réussies. */
+export async function weeklyGoalFor(userId: string, target: number) {
+  const since = new Date();
+  since.setFullYear(since.getFullYear() - 2);
+  const rows = await prisma.workout.findMany({
+    where: { userId, status: "done", startedAt: { gte: since } },
+    select: { startedAt: true },
+  });
+  return weeklyGoal(rows.map((r) => r.startedAt), target);
+}
+
+/** Séances terminées d'un mois (avec une marge d'un jour pour le fuseau horaire). */
+export function workoutsBetween(userId: string, from: Date, to: Date) {
+  return prisma.workout.findMany({
+    where: { userId, status: "done", startedAt: { gte: from, lt: to } },
+    orderBy: { startedAt: "asc" },
+    select: { id: true, name: true, startedAt: true, durationSec: true, volumeKg: true, _count: { select: { entries: true } } },
+  });
+}
+
+/** Relevés corporels, du plus récent au plus ancien — sans les photos (servies à part). */
+export function listBodyEntries(userId: string) {
+  return prisma.bodyEntry.findMany({
+    where: { userId },
+    orderBy: { date: "desc" },
+    select: { id: true, date: true, weight: true, chest: true, waist: true, hips: true, arm: true, thigh: true, photoType: true },
+  });
 }
 
 /** Volume soulevé par groupe musculaire sur une période. */

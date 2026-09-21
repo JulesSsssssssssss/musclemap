@@ -6,6 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { createSession, destroySession, hashPassword, requireUser, verifyPassword } from "@/lib/auth";
 import { computeWorkoutBests, previousSets } from "@/lib/queries";
 import { suggestSets } from "@/lib/progression";
+import { fromUnit } from "@/lib/format";
 
 export type FormState = { error?: string } | undefined;
 
@@ -351,6 +352,60 @@ export async function finishWorkout(formData: FormData) {
   redirect(`/seance/${workout.id}/resume`);
 }
 
+/* ── Suivi corporel ───────────────────────────────────────────────────────── */
+
+const MAX_PHOTO_BYTES = 700 * 1024;
+const PHOTO_TYPES = ["image/jpeg", "image/png", "image/webp"];
+
+/** « 82,5 » ou « 82.5 » → 82.5 ; vide ou invalide → null. */
+function parseMeasure(raw: FormDataEntryValue | null, max: number): number | null {
+  const value = Number(String(raw ?? "").trim().replace(",", "."));
+  return String(raw ?? "").trim() !== "" && Number.isFinite(value) && value > 0 && value <= max ? value : null;
+}
+
+/** Ajoute un relevé : poids (dans l'unité de l'utilisateur), mensurations en cm, photo facultative. */
+export async function addBodyEntry(formData: FormData): Promise<FormState> {
+  const user = await requireUser();
+
+  const weightInput = parseMeasure(formData.get("weight"), 700);
+  const data = {
+    weight: weightInput === null ? null : fromUnit(weightInput, user.unit),
+    chest: parseMeasure(formData.get("chest"), 300),
+    waist: parseMeasure(formData.get("waist"), 300),
+    hips: parseMeasure(formData.get("hips"), 300),
+    arm: parseMeasure(formData.get("arm"), 150),
+    thigh: parseMeasure(formData.get("thigh"), 200),
+  };
+
+  const file = formData.get("photo");
+  let photo: Uint8Array<ArrayBuffer> | null = null;
+  let photoType: string | null = null;
+  if (file instanceof File && file.size > 0) {
+    if (!PHOTO_TYPES.includes(file.type)) return { error: "Format de photo non pris en charge (JPEG, PNG ou WebP)." };
+    if (file.size > MAX_PHOTO_BYTES) return { error: "Photo trop lourde, même après réduction. Essaie une autre image." };
+    photo = new Uint8Array(await file.arrayBuffer());
+    photoType = file.type;
+  }
+
+  if (!photo && Object.values(data).every((v) => v === null)) {
+    return { error: "Renseigne au moins un poids, une mensuration ou une photo." };
+  }
+
+  // Jour choisi (calé à midi UTC pour rester le même jour à Paris) ; aujourd'hui par défaut.
+  const day = String(formData.get("date") ?? "");
+  const parsed = /^\d{4}-\d{2}-\d{2}$/.test(day) ? new Date(`${day}T12:00:00Z`) : null;
+  const date = parsed && !Number.isNaN(parsed.getTime()) && parsed.getTime() <= Date.now() + 86_400_000 ? parsed : new Date();
+
+  await prisma.bodyEntry.create({ data: { userId: user.id, date, ...data, photo, photoType } });
+  revalidatePath("/corps");
+}
+
+export async function deleteBodyEntry(formData: FormData) {
+  const user = await requireUser();
+  await prisma.bodyEntry.deleteMany({ where: { id: String(formData.get("entryId") ?? ""), userId: user.id } });
+  revalidatePath("/corps");
+}
+
 /* ── Réglages ─────────────────────────────────────────────────────────────── */
 
 export async function updateSettings(formData: FormData) {
@@ -358,14 +413,17 @@ export async function updateSettings(formData: FormData) {
   const unit = String(formData.get("unit") ?? user.unit);
   const restSeconds = Number(formData.get("restSeconds") ?? user.restSeconds);
   const theme = String(formData.get("theme") ?? user.theme);
+  const sessionsPerWeek = Number(formData.get("sessionsPerWeek") ?? user.sessionsPerWeek);
 
   await prisma.user.update({
     where: { id: user.id },
     data: {
+      sessionsPerWeek: Number.isFinite(sessionsPerWeek) ? Math.min(7, Math.max(1, Math.round(sessionsPerWeek))) : user.sessionsPerWeek,
       unit: unit === "lb" ? "lb" : "kg",
       restSeconds: Number.isFinite(restSeconds) ? Math.min(600, Math.max(15, restSeconds)) : user.restSeconds,
       theme: theme === "light" ? "light" : "dark",
     },
   });
   revalidatePath("/profil");
+  revalidatePath("/progression");
 }

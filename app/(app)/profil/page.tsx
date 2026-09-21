@@ -3,14 +3,15 @@ import { SettingsRows } from "@/components/SettingsRows";
 import { IconChevron } from "@/components/Icons";
 import { logout } from "@/app/actions";
 import { requireUser } from "@/lib/auth";
-import { profileStats } from "@/lib/queries";
+import { WeeklyGoal } from "@/components/WeeklyGoal";
+import { profileStats, weeklyGoalFor } from "@/lib/queries";
 import { num } from "@/lib/format";
 
 export const metadata = { title: "Profil · MuscleMap" };
 
 export default async function ProfilePage() {
   const user = await requireUser();
-  const stats = await profileStats(user.id);
+  const [stats, goal] = await Promise.all([profileStats(user.id), weeklyGoalFor(user.id, user.sessionsPerWeek)]);
   const perWeek = stats.months > 0 ? (stats.workouts / (stats.months * 4.33)).toFixed(1).replace(".0", "") : "0";
 
   return (
@@ -47,18 +48,27 @@ export default async function ProfilePage() {
         ))}
       </div>
 
+      <WeeklyGoal {...goal} />
+
       <div style={{ padding: "0 20px 24px", display: "flex", flexDirection: "column", gap: 9 }}>
         <span className="eyebrow">RÉGLAGES</span>
 
-        <SettingsRows unit={user.unit} restSeconds={user.restSeconds} theme={user.theme} />
+        <SettingsRows unit={user.unit} restSeconds={user.restSeconds} theme={user.theme} sessionsPerWeek={user.sessionsPerWeek} />
 
-        <Link
-          href="/progression"
-          style={{ padding: "14px 16px", borderRadius: 16, background: "var(--surf)", border: "1px solid var(--hair)", display: "flex", alignItems: "center", justifyContent: "space-between", color: "inherit" }}
-        >
-          <span style={{ font: "600 14px var(--sans)", color: "var(--txt)" }}>Historique des séances</span>
-          <span style={{ color: "var(--ghost)" }}><IconChevron /></span>
-        </Link>
+        {[
+          { href: "/progression", label: "Historique des séances" },
+          { href: "/calendrier", label: "Calendrier des séances" },
+          { href: "/corps", label: "Suivi corporel" },
+        ].map((l) => (
+          <Link
+            key={l.href}
+            href={l.href}
+            style={{ padding: "14px 16px", borderRadius: 16, background: "var(--surf)", border: "1px solid var(--hair)", display: "flex", alignItems: "center", justifyContent: "space-between", color: "inherit" }}
+          >
+            <span style={{ font: "600 14px var(--sans)", color: "var(--txt)" }}>{l.label}</span>
+            <span style={{ color: "var(--ghost)" }}><IconChevron /></span>
+          </Link>
+        ))}
 
         <a
           href="/api/export"
