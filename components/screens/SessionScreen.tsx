@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState, useTransition } from "react";
-import { addSet, deleteWorkout, finishWorkout, removeEntry, removeSet, renameWorkout, startWorkout, updateSet } from "@/app/actions";
+import { addSet, deleteWorkout, finishWorkout, removeEntry, removeSet, renameWorkout, saveAsRoutine, startWorkout, updateSet } from "@/app/actions";
 import { IconCheck, IconPencil, IconTrash } from "@/components/Icons";
 import { dec, mmss } from "@/lib/format";
 
@@ -12,6 +12,8 @@ export type SessionEntry = {
   name: string;
   meta: string;
   note: string | null;
+  /** Charge relevée par rapport à la dernière séance (surcharge progressive). */
+  overload: boolean;
   sets: SessionSet[];
 };
 
@@ -40,6 +42,11 @@ export function SessionScreen({
 }) {
   const [elapsed, setElapsed] = useState(0);
   const [rest, setRest] = useState(0);
+  const [restEnd, setRestEnd] = useState<number | null>(null);
+  const [restTotal, setRestTotal] = useState(restSeconds);
+  const [sound, setSound] = useState(true);
+  const soundOn = useRef(true);
+  const audio = useRef<AudioContext | null>(null);
   const [open, setOpen] = useState(0);
   const [local, setLocal] = useState(entries);
   const [, startAction] = useTransition();
@@ -57,10 +64,78 @@ export function SessionScreen({
   }, [startedAt]);
 
   useEffect(() => {
-    if (rest <= 0) return;
-    const id = setInterval(() => setRest((r) => Math.max(0, r - 1)), 1000);
+    try {
+      const saved = localStorage.getItem("mm-rest-sound") !== "off";
+      soundOn.current = saved;
+      setSound(saved);
+    } catch {}
+  }, []);
+
+  /** Bip triple + vibration à la fin du repos. */
+  const alarm = () => {
+    navigator.vibrate?.([200, 100, 200, 100, 300]);
+    const ctx = audio.current;
+    if (!ctx || !soundOn.current) return;
+    [0, 0.28, 0.56].forEach((t) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      const at = ctx.currentTime + t;
+      osc.frequency.value = 880;
+      gain.gain.setValueAtTime(0.0001, at);
+      gain.gain.exponentialRampToValueAtTime(0.3, at + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, at + 0.2);
+      osc.connect(gain).connect(ctx.destination);
+      osc.start(at);
+      osc.stop(at + 0.22);
+    });
+  };
+
+  // Le repos est calé sur une heure de fin : il reste juste si l'onglet passe en arrière-plan.
+  useEffect(() => {
+    if (restEnd === null) return;
+    const update = () => {
+      const left = Math.max(0, Math.ceil((restEnd - Date.now()) / 1000));
+      setRest(left);
+      if (left === 0) {
+        setRestEnd(null);
+        alarm();
+      }
+    };
+    update();
+    const id = setInterval(update, 250);
     return () => clearInterval(id);
-  }, [rest]);
+  }, [restEnd]);
+
+  const startRest = (seconds: number) => {
+    // Le contexte audio doit être créé pendant un geste de l'utilisateur.
+    if (!audio.current && typeof AudioContext !== "undefined") audio.current = new AudioContext();
+    void audio.current?.resume();
+    setRestTotal(seconds);
+    setRest(seconds);
+    setRestEnd(Date.now() + seconds * 1000);
+  };
+
+  const skipRest = () => {
+    setRestEnd(null);
+    setRest(0);
+  };
+
+  const adjustRest = (delta: number) => {
+    if (restEnd === null) return;
+    const next = restEnd + delta * 1000;
+    if (next <= Date.now()) return skipRest();
+    setRestTotal((t) => Math.max(1, t + delta));
+    setRestEnd(next);
+  };
+
+  const toggleSound = () => {
+    const next = !sound;
+    soundOn.current = next;
+    setSound(next);
+    try {
+      localStorage.setItem("mm-rest-sound", next ? "on" : "off");
+    } catch {}
+  };
 
   /** Écrit la valeur après une courte pause, pour ne pas spammer le serveur. */
   const persist = (setId: string, patch: { weight?: number; reps?: number }) => {
@@ -85,7 +160,7 @@ export function SessionScreen({
     if (planned) return;
     const next = !set.done;
     patchSet(entryId, set.id, { done: next });
-    if (next) setRest(restSeconds);
+    if (next) startRest(restSeconds);
     startAction(async () => {
       await updateSet({ setId: set.id, done: next, weight: set.weight, reps: set.reps });
     });
@@ -106,24 +181,45 @@ export function SessionScreen({
         {!planned && rest > 0 && (
           <div
             role="timer"
+            aria-label={`Repos, ${mmss(rest)} restantes`}
             style={{
-              padding: "14px 16px", borderRadius: 18, background: "rgba(255,91,30,.1)",
-              border: "1px solid rgba(255,91,30,.3)", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10,
+              position: "sticky", top: 8, zIndex: 5, overflow: "hidden", padding: "14px 16px", borderRadius: 18,
+              background: "var(--surf)", border: "1px solid rgba(255,91,30,.3)", boxShadow: "0 10px 30px rgba(0,0,0,.5)",
+              display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10,
             }}
           >
-            <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+            <div
+              aria-hidden="true"
+              style={{
+                position: "absolute", inset: 0, background: "rgba(255,91,30,.12)", transformOrigin: "left",
+                transform: `scaleX(${Math.min(1, rest / restTotal)})`, transition: "transform .3s linear",
+              }}
+            />
+            <div style={{ position: "relative", display: "flex", flexDirection: "column", gap: 2 }}>
               <span className="eyebrow" style={{ letterSpacing: "1.4px" }}>REPOS EN COURS</span>
               <span style={{ font: "700 26px var(--mono)", color: "var(--acc)", letterSpacing: "-1px" }}>{mmss(rest)}</span>
             </div>
-            <div style={{ display: "flex", gap: 8 }}>
+            <div style={{ position: "relative", display: "flex", gap: 6 }}>
+              {[-15, 30].map((d) => (
+                <button
+                  key={d}
+                  onClick={() => adjustRest(d)}
+                  aria-label={`${d > 0 ? "Ajouter" : "Retirer"} ${Math.abs(d)} secondes`}
+                  style={{ minHeight: 44, minWidth: 44, padding: "0 10px", borderRadius: 13, background: "rgba(255,255,255,.06)", border: "1px solid var(--hair2)", color: "var(--txt)", font: "600 12px var(--mono)", cursor: "pointer" }}
+                >
+                  {d > 0 ? "+" : "−"}{Math.abs(d)}s
+                </button>
+              ))}
               <button
-                onClick={() => setRest((r) => r + 30)}
-                style={{ minHeight: 44, padding: "0 13px", borderRadius: 13, background: "rgba(255,255,255,.06)", border: "1px solid var(--hair2)", color: "var(--txt)", font: "600 12px var(--mono)", cursor: "pointer" }}
+                onClick={toggleSound}
+                aria-pressed={sound}
+                aria-label="Son de fin de repos"
+                style={{ minHeight: 44, minWidth: 44, padding: "0 8px", borderRadius: 13, background: "rgba(255,255,255,.06)", border: "1px solid var(--hair2)", color: sound ? "var(--txt)" : "var(--dark)", font: "600 11px var(--mono)", cursor: "pointer" }}
               >
-                +30s
+                {sound ? "SON" : "MUET"}
               </button>
               <button
-                onClick={() => setRest(0)}
+                onClick={skipRest}
                 style={{ minHeight: 44, padding: "0 13px", borderRadius: 13, background: "var(--acc)", border: 0, color: "var(--ink)", font: "700 12px var(--sans)", cursor: "pointer" }}
               >
                 Passer
@@ -157,7 +253,14 @@ export function SessionScreen({
                 <div className="gif" style={{ width: 44, height: 44, flex: "none", borderRadius: 13 }} />
                 <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 3 }}>
                   <span style={{ font: "600 14px var(--sans)", color: "var(--txt)" }}>{entry.name}</span>
-                  <span style={{ font: "500 11px var(--mono)", color: "var(--mut)" }}>{entry.meta}</span>
+                  <span style={{ font: "500 11px var(--mono)", color: "var(--mut)" }}>
+                    {entry.meta}
+                    {entry.overload && (
+                      <span style={{ marginLeft: 8, padding: "2px 6px", borderRadius: 6, background: "rgba(255,91,30,.14)", color: "var(--acc)" }}>
+                        ↑ SURCHARGE
+                      </span>
+                    )}
+                  </span>
                 </div>
                 <span
                   style={{
@@ -292,6 +395,15 @@ export function SessionScreen({
         >
           + Ajouter un exercice
         </Link>
+
+        {local.length > 0 && (
+          <form action={saveAsRoutine}>
+            <input type="hidden" name="workoutId" value={workoutId} />
+            <button type="submit" className="ghostbtn tap">
+              ☆ Enregistrer comme routine
+            </button>
+          </form>
+        )}
       </div>
 
       {planned && (

@@ -10,7 +10,7 @@ export default async function WorkoutPage({ params }: { params: Promise<{ id: st
   const user = await requireUser();
   const { id } = await params;
   const workout = await getWorkout(user.id, id);
-  if (!workout) notFound();
+  if (!workout || workout.status === "template") notFound();
   if (workout.status === "done") redirect(`/seance/${id}/resume`);
 
   const prev = await previousSets(user.id, workout.entries.map((e) => e.exerciseId));
@@ -20,6 +20,11 @@ export default async function WorkoutPage({ params }: { params: Promise<{ id: st
     name: entry.exercise.name,
     meta: `${entry.exercise.equipment} · ${entry.exercise.primaryMuscle.toUpperCase()}`,
     note: entry.note,
+    overload: (() => {
+      const before = prev[entry.exerciseId];
+      const first = entry.sets[0];
+      return Boolean(before?.length && first && first.weight > before[0].weight);
+    })(),
     sets: entry.sets.map((set, i) => {
       const previous = prev[entry.exerciseId]?.[i];
       return {
