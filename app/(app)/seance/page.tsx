@@ -4,6 +4,7 @@ import { IconTrash } from "@/components/Icons";
 import { requireUser } from "@/lib/auth";
 import { listRoutines, listWorkouts } from "@/lib/queries";
 import { dayMonth, mmss } from "@/lib/format";
+import { SwipeToDelete } from "@/components/SwipeToDelete";
 
 export const metadata = { title: "Séances · MuscleMap" };
 
@@ -103,9 +104,10 @@ export default async function SessionsPage() {
                 {g.items.map((w) => {
                   const st = STATUS[w.status as keyof typeof STATUS] ?? STATUS.planned;
                   const date = dayMonth(w.startedAt);
-                  return (
+                  const card = (
                     <Link
                       key={w.id}
+                      draggable={false}
                       href={w.status === "done" ? `/seance/${w.id}/resume` : `/seance/${w.id}`}
                       className="tap"
                       style={{ display: "flex", alignItems: "center", gap: 12, padding: 14, borderRadius: 18, background: "var(--surf)", border: "1px solid var(--hair)", color: "var(--txt)" }}
@@ -121,6 +123,13 @@ export default async function SessionsPage() {
                         {st.label}
                       </span>
                     </Link>
+                  );
+                  return w.status === "planned" ? (
+                    <SwipeToDelete key={w.id} workoutId={w.id} label={`Supprimer la séance « ${w.name} »`}>
+                      {card}
+                    </SwipeToDelete>
+                  ) : (
+                    card
                   );
                 })}
               </div>
