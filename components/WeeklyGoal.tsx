@@ -34,8 +34,11 @@ export function WeeklyGoal({
             strokeDasharray={`${(C * ratio).toFixed(1)} ${C.toFixed(1)}`} transform="rotate(-90 38 38)"
           />
         </svg>
-        <div style={{ position: "absolute", inset: 0, display: "grid", placeItems: "center", font: "700 19px var(--sans)", letterSpacing: "-.5px" }}>
-          {done}<span style={{ fontSize: 12, color: "var(--mut)" }}>/{target}</span>
+        {/* Un seul enfant : dans une grille, « 2 » et « /3 » seraient empilés sur deux lignes. */}
+        <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", font: "700 19px var(--sans)", letterSpacing: "-.5px", fontVariantNumeric: "tabular-nums" }}>
+          <span>
+            {done}<span style={{ fontSize: 12, color: "var(--mut)" }}>/{target}</span>
+          </span>
         </div>
       </div>
 
