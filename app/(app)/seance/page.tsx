@@ -2,6 +2,7 @@ import Link from "next/link";
 import { createWorkout } from "@/app/actions";
 import { requireUser } from "@/lib/auth";
 import { listWorkouts } from "@/lib/queries";
+import { DeleteWorkoutButton } from "@/components/DeleteWorkoutButton";
 import { dayMonth, mmss } from "@/lib/format";
 
 export const metadata = { title: "Séances · MuscleMap" };
@@ -53,11 +54,14 @@ export default async function SessionsPage() {
                   const st = STATUS[w.status as keyof typeof STATUS] ?? STATUS.planned;
                   const date = dayMonth(w.startedAt);
                   return (
-                    <Link
+                    <div
                       key={w.id}
+                      style={{ display: "flex", alignItems: "center", gap: 8, paddingRight: 10, borderRadius: 18, background: "var(--surf)", border: "1px solid var(--hair)" }}
+                    >
+                    <Link
                       href={w.status === "done" ? `/seance/${w.id}/resume` : `/seance/${w.id}`}
                       className="tap"
-                      style={{ display: "flex", alignItems: "center", gap: 12, padding: 14, borderRadius: 18, background: "var(--surf)", border: "1px solid var(--hair)", color: "var(--txt)" }}
+                      style={{ flex: 1, minWidth: 0, display: "flex", alignItems: "center", gap: 12, padding: 14, color: "var(--txt)" }}
                     >
                       <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 4 }}>
                         <span style={{ font: "600 15px var(--sans)" }}>{w.name}</span>
@@ -70,6 +74,8 @@ export default async function SessionsPage() {
                         {st.label}
                       </span>
                     </Link>
+                    <DeleteWorkoutButton workoutId={w.id} name={w.name} />
+                    </div>
                   );
                 })}
               </div>
