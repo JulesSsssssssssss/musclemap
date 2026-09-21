@@ -107,6 +107,7 @@ export default async function SessionsPage() {
                   const card = (
                     <Link
                       key={w.id}
+                      draggable={false}
                       href={w.status === "done" ? `/seance/${w.id}/resume` : `/seance/${w.id}`}
                       className="tap"
                       style={{ display: "flex", alignItems: "center", gap: 12, padding: 14, borderRadius: 18, background: "var(--surf)", border: "1px solid var(--hair)", color: "var(--txt)" }}

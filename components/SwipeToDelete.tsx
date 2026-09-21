@@ -63,6 +63,7 @@ export function SwipeToDelete({ workoutId, label, children }: { workoutId: strin
         onPointerMove={onPointerMove}
         onPointerUp={onPointerEnd}
         onPointerCancel={onPointerEnd}
+        onDragStart={(e) => e.preventDefault()}
         onClickCapture={(e) => {
           if (moved.current) {
             e.preventDefault();
@@ -79,6 +80,9 @@ export function SwipeToDelete({ workoutId, label, children }: { workoutId: strin
           transform: `translateX(${x}px)`,
           transition: dragging ? "none" : "transform .2s ease",
           touchAction: "pan-y",
+          userSelect: "none",
+          WebkitUserSelect: "none",
+          WebkitTouchCallout: "none",
           background: "var(--surf)",
         }}
       >
