@@ -14,10 +14,10 @@ const workoutInclude = {
   },
 };
 
-/** Toutes les séances de l'utilisateur, avec le nombre d'exercices. */
+/** Toutes les séances de l'utilisateur (hors routines), avec le nombre d'exercices. */
 export function listWorkouts(userId: string) {
   return prisma.workout.findMany({
-    where: { userId },
+    where: { userId, status: { not: "template" } },
     orderBy: { startedAt: "desc" },
     include: { _count: { select: { entries: true } } },
   });
@@ -178,6 +178,47 @@ export async function profileStats(userId: string) {
   const user = await prisma.user.findUnique({ where: { id: userId }, select: { createdAt: true } });
   const months = user ? Math.max(1, Math.round((Date.now() - user.createdAt.getTime()) / (1000 * 60 * 60 * 24 * 30))) : 1;
   return { workouts, records, totalKg: agg._sum.volumeKg ?? 0, months };
+}
+
+/**
+ * Routines : des séances au statut « template », réutilisables en un tap.
+ * Elles n'apparaissent ni dans la liste des séances ni dans les statistiques.
+ */
+export function listRoutines(userId: string) {
+  return prisma.workout.findMany({
+    where: { userId, status: "template" },
+    orderBy: { startedAt: "desc" },
+    include: {
+      entries: {
+        orderBy: { position: "asc" },
+        include: { exercise: { select: { name: true, primaryMuscle: true } }, _count: { select: { sets: true } } },
+      },
+    },
+  });
+}
+
+/** Séries validées par groupe musculaire sur les 7 et 30 derniers jours. */
+export async function muscleVolume(userId: string) {
+  const day = 24 * 60 * 60 * 1000;
+  const now = Date.now();
+  const entries = await prisma.workoutExercise.findMany({
+    where: { workout: { userId, status: "done", startedAt: { gte: new Date(now - 30 * day) } } },
+    select: {
+      exercise: { select: { muscle: true } },
+      workout: { select: { startedAt: true } },
+      sets: { where: { done: true }, select: { id: true } },
+    },
+  });
+
+  const out: Record<7 | 30, Partial<Record<MuscleKey, number>>> = { 7: {}, 30: {} };
+  for (const e of entries) {
+    const key = e.exercise.muscle as MuscleKey;
+    const age = now - e.workout.startedAt.getTime();
+    for (const days of [7, 30] as const) {
+      if (age <= days * day) out[days][key] = (out[days][key] ?? 0) + e.sets.length;
+    }
+  }
+  return out;
 }
 
 /** Records battus pendant une séance, calculés à la clôture. */

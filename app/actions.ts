@@ -4,7 +4,8 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { createSession, destroySession, hashPassword, requireUser, verifyPassword } from "@/lib/auth";
-import { computeWorkoutBests } from "@/lib/queries";
+import { computeWorkoutBests, previousSets } from "@/lib/queries";
+import { suggestSets } from "@/lib/progression";
 
 export type FormState = { error?: string } | undefined;
 
@@ -49,9 +50,9 @@ export async function logout() {
 
 /* ── Séances ──────────────────────────────────────────────────────────────── */
 
-/** Séance de l'utilisateur, si elle existe. */
+/** Séance de l'utilisateur (hors routines), si elle existe. */
 async function ownWorkout(userId: string, id: string) {
-  return prisma.workout.findFirst({ where: { id, userId } });
+  return prisma.workout.findFirst({ where: { id, userId, status: { not: "template" } } });
 }
 
 const DAYS = ["dimanche", "lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi"];
@@ -88,6 +89,88 @@ export async function deleteWorkout(formData: FormData) {
   redirect("/seance");
 }
 
+/* ── Routines ─────────────────────────────────────────────────────────────── */
+
+/** Enregistre une séance (à venir, en cours ou terminée) comme routine réutilisable. */
+export async function saveAsRoutine(formData: FormData) {
+  const user = await requireUser();
+  const source = await prisma.workout.findFirst({
+    where: { id: String(formData.get("workoutId") ?? ""), userId: user.id, status: { not: "template" } },
+    include: { entries: { orderBy: { position: "asc" }, include: { sets: { orderBy: { position: "asc" } } } } },
+  });
+  if (!source) redirect("/seance");
+
+  const entries = source.entries
+    .map((e) => {
+      const done = e.sets.filter((s) => s.done);
+      return { exerciseId: e.exerciseId, sets: done.length ? done : e.sets };
+    })
+    .filter((e) => e.sets.length > 0);
+  if (entries.length === 0) redirect(`/seance/${source.id}`);
+
+  await prisma.workout.create({
+    data: {
+      userId: user.id,
+      name: source.name,
+      status: "template",
+      entries: {
+        create: entries.map((e, position) => ({
+          exerciseId: e.exerciseId,
+          position,
+          sets: { create: e.sets.map((s, i) => ({ position: i, weight: s.weight, reps: s.reps, done: false })) },
+        })),
+      },
+    },
+  });
+  revalidatePath("/seance");
+  redirect("/seance");
+}
+
+/** Lance une routine : crée une séance à venir, pré-remplie d'après la dernière performance. */
+export async function startFromRoutine(formData: FormData) {
+  const user = await requireUser();
+  const routine = await prisma.workout.findFirst({
+    where: { id: String(formData.get("routineId") ?? ""), userId: user.id, status: "template" },
+    include: {
+      entries: { orderBy: { position: "asc" }, include: { exercise: true, sets: { orderBy: { position: "asc" } } } },
+    },
+  });
+  if (!routine) redirect("/seance");
+
+  const previous = await previousSets(user.id, routine.entries.map((e) => e.exerciseId));
+
+  const workout = await prisma.workout.create({
+    data: {
+      userId: user.id,
+      name: routine.name,
+      status: "planned",
+      entries: {
+        create: routine.entries.map((e, position) => {
+          const last = previous[e.exerciseId];
+          const sets = last?.length
+            ? suggestSets(last, e.exercise.scheme, e.sets.length).sets
+            : e.sets.map((s) => ({ weight: s.weight, reps: s.reps }));
+          return {
+            exerciseId: e.exerciseId,
+            position,
+            note: e.note,
+            sets: { create: sets.map((s, i) => ({ position: i, weight: s.weight, reps: s.reps, done: false })) },
+          };
+        }),
+      },
+    },
+  });
+  revalidatePath("/seance");
+  redirect(`/seance/${workout.id}`);
+}
+
+export async function deleteRoutine(formData: FormData) {
+  const user = await requireUser();
+  const id = String(formData.get("routineId") ?? "");
+  await prisma.workout.deleteMany({ where: { id, userId: user.id, status: "template" } });
+  revalidatePath("/seance");
+}
+
 export type EditableWorkout = { id: string; name: string; status: string; exercises: number };
 
 /** Séances auxquelles on peut encore ajouter des exercices (à venir + en cours). */
@@ -122,19 +205,9 @@ export async function addExerciseToWorkout(
 
   const count = await prisma.workoutExercise.count({ where: { workoutId: workout.id } });
 
-  // Pré-remplit avec la dernière performance connue sur cet exercice.
-  const previous = await prisma.workoutExercise.findFirst({
-    where: { exerciseId: exercise.id, workout: { userId: user.id, status: "done" } },
-    orderBy: { workout: { startedAt: "desc" } },
-    include: { sets: { orderBy: { position: "asc" } } },
-  });
-  const template = previous?.sets.length
-    ? previous.sets.map((s) => ({ weight: s.weight, reps: s.reps }))
-    : [
-        { weight: 0, reps: 10 },
-        { weight: 0, reps: 10 },
-        { weight: 0, reps: 10 },
-      ];
+  // Pré-remplit avec la dernière performance, en proposant une surcharge si elle est méritée.
+  const previous = await previousSets(user.id, [exercise.id]);
+  const template = suggestSets(previous[exercise.id] ?? [], exercise.scheme).sets;
 
   await prisma.workoutExercise.create({
     data: {

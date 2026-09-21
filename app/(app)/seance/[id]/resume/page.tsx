@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { saveAsRoutine } from "@/app/actions";
 import { BodySilhouette, type Highlight } from "@/components/body/BodySilhouette";
 import { requireUser } from "@/lib/auth";
 import { getWorkout, listRecords } from "@/lib/queries";
@@ -12,7 +13,7 @@ export default async function SummaryPage({ params }: { params: Promise<{ id: st
   const user = await requireUser();
   const { id } = await params;
   const workout = await getWorkout(user.id, id);
-  if (!workout) notFound();
+  if (!workout || workout.status === "template") notFound();
 
   const doneSets = workout.entries.flatMap((e) => e.sets.filter((s) => s.done));
 
@@ -116,6 +117,12 @@ export default async function SummaryPage({ params }: { params: Promise<{ id: st
         <Link href="/progression" className="primary tap" style={{ minHeight: 58, borderRadius: 19, textDecoration: "none" }}>
           Voir ma progression
         </Link>
+        <form action={saveAsRoutine}>
+          <input type="hidden" name="workoutId" value={workout.id} />
+          <button type="submit" className="ghostbtn tap" style={{ width: "100%" }}>
+            ☆ Enregistrer comme routine
+          </button>
+        </form>
         <Link href="/" className="ghostbtn tap" style={{ display: "grid", placeItems: "center", textDecoration: "none" }}>
           Retour au corps
         </Link>

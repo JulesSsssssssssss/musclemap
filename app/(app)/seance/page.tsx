@@ -1,7 +1,8 @@
 import Link from "next/link";
-import { createWorkout } from "@/app/actions";
+import { createWorkout, deleteRoutine, startFromRoutine } from "@/app/actions";
+import { IconTrash } from "@/components/Icons";
 import { requireUser } from "@/lib/auth";
-import { listWorkouts } from "@/lib/queries";
+import { listRoutines, listWorkouts } from "@/lib/queries";
 import { dayMonth, mmss } from "@/lib/format";
 
 export const metadata = { title: "Séances · MuscleMap" };
@@ -14,7 +15,7 @@ const STATUS = {
 
 export default async function SessionsPage() {
   const user = await requireUser();
-  const workouts = await listWorkouts(user.id);
+  const [workouts, routines] = await Promise.all([listWorkouts(user.id), listRoutines(user.id)]);
   const groups = [
     { title: "En cours", items: workouts.filter((w) => w.status === "active") },
     { title: "À venir", items: workouts.filter((w) => w.status === "planned") },
@@ -37,7 +38,47 @@ export default async function SessionsPage() {
         </button>
       </form>
 
-      {workouts.length === 0 && (
+      {routines.length > 0 && (
+        <section style={{ padding: "0 20px 18px" }}>
+          <h2 className="eyebrow" style={{ margin: "0 0 10px", letterSpacing: "1.6px" }}>MES ROUTINES</h2>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {routines.map((r) => {
+              const muscles = [...new Set(r.entries.map((e) => e.exercise.primaryMuscle))].slice(0, 3).join(" · ");
+              return (
+                <div
+                  key={r.id}
+                  style={{ display: "flex", alignItems: "center", gap: 10, padding: 14, borderRadius: 18, background: "var(--surf)", border: "1px solid var(--hair)" }}
+                >
+                  <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 4 }}>
+                    <span style={{ font: "600 15px var(--sans)" }}>{r.name}</span>
+                    <span style={{ font: "500 11px var(--mono)", color: "var(--mut)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {r.entries.length} EXO{r.entries.length > 1 ? "S" : ""}{muscles && ` · ${muscles.toUpperCase()}`}
+                    </span>
+                  </div>
+                  <form action={startFromRoutine}>
+                    <input type="hidden" name="routineId" value={r.id} />
+                    <button type="submit" className="primary" style={{ width: "auto", minHeight: 44, padding: "0 16px", borderRadius: 14, font: "700 13px var(--sans)" }}>
+                      Lancer
+                    </button>
+                  </form>
+                  <form action={deleteRoutine}>
+                    <input type="hidden" name="routineId" value={r.id} />
+                    <button
+                      type="submit"
+                      aria-label={`Supprimer la routine « ${r.name} »`}
+                      style={{ width: 44, height: 44, borderRadius: 13, background: "var(--surf2)", border: "1px solid var(--hair)", color: "var(--faint)", cursor: "pointer", display: "grid", placeItems: "center", padding: 0 }}
+                    >
+                      <IconTrash />
+                    </button>
+                  </form>
+                </div>
+              );
+            })}
+          </div>
+        </section>
+      )}
+
+      {workouts.length === 0 && routines.length === 0 && (
         <p style={{ textAlign: "center", padding: "30px 30px", font: "400 13px/1.5 var(--sans)", color: "var(--mut)" }}>
           Aucune séance pour l&apos;instant. Crée-en une ci-dessus, puis ajoute des exercices depuis la bibliothèque.
         </p>
