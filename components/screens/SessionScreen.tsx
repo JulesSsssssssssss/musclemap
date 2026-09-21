@@ -2,16 +2,36 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState, useTransition } from "react";
-import { addSet, deleteWorkout, finishWorkout, removeEntry, removeSet, renameWorkout, saveAsRoutine, startWorkout, updateSet } from "@/app/actions";
+import {
+  addSet, addWarmup, deleteWorkout, finishWorkout, removeEntry, removeSet, renameWorkout, saveAsRoutine,
+  setEntryNote, startWorkout, toggleSuperset, updateSet,
+} from "@/app/actions";
 import { IconCheck, IconPencil, IconTrash } from "@/components/Icons";
 import { dec, mmss } from "@/lib/format";
+import { dequeue, enqueue, readQueue } from "@/lib/offline-queue";
 
-export type SessionSet = { id: string; weight: number; reps: number; done: boolean; prev: string };
+type SetUpdate = Parameters<typeof updateSet>[0];
+const RPE_VALUES = [6, 7, 8, 9, 10];
+
+export type SessionSet = {
+  id: string;
+  weight: number;
+  reps: number;
+  done: boolean;
+  kind: "work" | "warmup";
+  rpe: number | null;
+  note: string | null;
+  prev: string;
+};
 export type SessionEntry = {
   id: string;
   name: string;
   meta: string;
   note: string | null;
+  /** Enchaîné avec l'exercice précédent. */
+  superset: boolean;
+  /** L'exercice suivant est enchaîné avec celui-ci : pas de repos entre les deux. */
+  linkedToNext: boolean;
   /** Charge relevée par rapport à la dernière séance (surcharge progressive). */
   overload: boolean;
   sets: SessionSet[];
@@ -48,9 +68,13 @@ export function SessionScreen({
   const soundOn = useRef(true);
   const audio = useRef<AudioContext | null>(null);
   const [open, setOpen] = useState(0);
+  const [detail, setDetail] = useState<string | null>(null);
+  const [pending, setPending] = useState(0);
+  const queueKey = `mm-queue-${workoutId}`;
   const [local, setLocal] = useState(entries);
   const [, startAction] = useTransition();
   const timers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+  const patches = useRef<Record<string, Omit<SetUpdate, "setId">>>({});
 
   useEffect(() => setLocal(entries), [entries]);
 
@@ -137,12 +161,54 @@ export function SessionScreen({
     } catch {}
   };
 
+  /**
+   * Envoie une modification de série. Sans réseau, elle est gardée sur l'appareil
+   * et rejouée au retour de la connexion : la saisie en salle ne se perd pas.
+   */
+  const sendUpdate = async (input: SetUpdate) => {
+    if (navigator.onLine) {
+      try {
+        await updateSet(input);
+        return;
+      } catch {
+        // réseau coupé en cours de route : on met en attente
+      }
+    }
+    setPending(enqueue(queueKey, input));
+  };
+
+  // Rejoue la file d'attente au chargement et à chaque retour du réseau.
+  useEffect(() => {
+    setPending(readQueue<SetUpdate>(queueKey).length);
+    let flushing = false;
+    const flush = async () => {
+      if (flushing || !navigator.onLine) return;
+      flushing = true;
+      try {
+        for (const item of readQueue<SetUpdate>(queueKey)) {
+          await updateSet(item);
+          setPending(dequeue<SetUpdate>(queueKey, item.setId));
+        }
+      } catch {
+        // toujours hors ligne : on réessaiera
+      }
+      flushing = false;
+    };
+    void flush();
+    window.addEventListener("online", flush);
+    return () => window.removeEventListener("online", flush);
+  }, [queueKey]);
+
   /** Écrit la valeur après une courte pause, pour ne pas spammer le serveur. */
-  const persist = (setId: string, patch: { weight?: number; reps?: number }) => {
+  const persist = (setId: string, patch: Omit<SetUpdate, "setId">) => {
+    // Les modifications de plusieurs champs dans la même seconde sont regroupées en un seul envoi.
+    patches.current[setId] = { ...patches.current[setId], ...patch };
     clearTimeout(timers.current[setId]);
     timers.current[setId] = setTimeout(() => {
+      const merged = patches.current[setId];
+      delete patches.current[setId];
       startAction(async () => {
-        await updateSet({ setId, ...patch });
+        await sendUpdate({ setId, ...merged });
       });
     }, 500);
   };
@@ -156,14 +222,30 @@ export function SessionScreen({
 
   const planned = mode === "planned";
 
-  const toggleDone = (entryId: string, set: SessionSet) => {
+  const toggleDone = (entryIndex: number, set: SessionSet) => {
     if (planned) return;
+    const entry = local[entryIndex];
     const next = !set.done;
-    patchSet(entryId, set.id, { done: next });
-    if (next) startRest(restSeconds);
+    patchSet(entry.id, set.id, { done: next });
+    if (next) {
+      if (entry.linkedToNext) {
+        // Superset : on enchaîne directement sur l'exercice suivant, sans repos.
+        skipRest();
+        setOpen(entryIndex + 1);
+      } else {
+        // Un échauffement ne demande qu'un repos court.
+        startRest(set.kind === "warmup" ? Math.min(restSeconds, 45) : restSeconds);
+      }
+    }
     startAction(async () => {
-      await updateSet({ setId: set.id, done: next, weight: set.weight, reps: set.reps });
+      await sendUpdate({ setId: set.id, done: next, weight: set.weight, reps: set.reps });
     });
+  };
+
+  /** Type, RPE et note d'une série : appliqués tout de suite, enregistrés ensuite. */
+  const editDetail = (entryId: string, setId: string, patch: Pick<SetUpdate, "kind" | "rpe" | "note">) => {
+    patchSet(entryId, setId, patch as Partial<SessionSet>);
+    persist(setId, patch);
   };
 
   return (
@@ -178,6 +260,12 @@ export function SessionScreen({
       />
 
       <div style={{ padding: "0 20px 24px", display: "flex", flexDirection: "column", gap: 12 }}>
+        {pending > 0 && (
+          <div role="status" style={{ padding: "11px 14px", borderRadius: 14, background: "rgba(255,196,0,.08)", border: "1px solid rgba(255,196,0,.28)", font: "500 12px/1.4 var(--sans)", color: "#F2C94C" }}>
+            Hors ligne : {pending} série{pending > 1 ? "s" : ""} en attente. Elles seront enregistrées dès le retour du réseau.
+          </div>
+        )}
+
         {!planned && rest > 0 && (
           <div
             role="timer"
@@ -238,8 +326,19 @@ export function SessionScreen({
           const done = entry.sets.filter((s) => s.done).length;
           const full = done === entry.sets.length && entry.sets.length > 0;
           const isOpen = i === open;
+          const inSuperset = entry.superset || entry.linkedToNext;
+          let workNumber = 0;
           return (
-            <div key={entry.id} style={{ borderRadius: 20, background: "var(--surf)", border: `1px solid ${isOpen ? "var(--hair2)" : "var(--hair)"}`, overflow: "hidden" }}>
+            <div
+              key={entry.id}
+              style={{
+                borderRadius: 20, background: "var(--surf)", overflow: "hidden",
+                border: `1px solid ${isOpen ? "var(--hair2)" : "var(--hair)"}`,
+                borderLeft: inSuperset ? "3px solid var(--acc)" : undefined,
+                // Les exercices d'un superset se collent : on annule l'écart avec le précédent.
+                marginTop: entry.superset ? -6 : 0,
+              }}
+            >
               <button
                 onClick={() => setOpen(isOpen ? -1 : i)}
                 aria-expanded={isOpen}
@@ -258,6 +357,11 @@ export function SessionScreen({
                     {entry.overload && (
                       <span style={{ marginLeft: 8, padding: "2px 6px", borderRadius: 6, background: "rgba(255,91,30,.14)", color: "var(--acc)" }}>
                         ↑ SURCHARGE
+                      </span>
+                    )}
+                    {inSuperset && (
+                      <span style={{ marginLeft: 8, padding: "2px 6px", borderRadius: 6, background: "var(--surf3)", color: "var(--dim)" }}>
+                        SUPERSET
                       </span>
                     )}
                   </span>
@@ -281,15 +385,32 @@ export function SessionScreen({
                     <span />
                   </div>
 
-                  {entry.sets.map((set, j) => (
+                  {entry.sets.map((set) => {
+                    const warm = set.kind === "warmup";
+                    const label = warm ? "É" : String(++workNumber);
+                    const showDetail = detail === set.id;
+                    const hasDetail = warm || set.rpe !== null || Boolean(set.note);
+                    return (
+                    <div key={set.id} style={{ marginBottom: 7 }}>
                     <div
-                      key={set.id}
                       style={{
                         display: "grid", gridTemplateColumns: "34px 1fr 74px 62px 44px", gap: 6, alignItems: "center",
-                        marginBottom: 7, background: set.done ? "rgba(255,91,30,.07)" : "transparent", borderRadius: 13, padding: "4px 2px",
+                        background: set.done ? "rgba(255,91,30,.07)" : "transparent", borderRadius: 13, padding: "4px 2px",
                       }}
                     >
-                      <span style={{ font: "700 15px var(--sans)", color: set.done ? "var(--acc)" : "var(--faint)", textAlign: "center" }}>{j + 1}</span>
+                      <button
+                        onClick={() => setDetail(showDetail ? null : set.id)}
+                        aria-expanded={showDetail}
+                        aria-label={`Série ${warm ? "d'échauffement" : label} : détails (type, effort, note)`}
+                        style={{
+                          minHeight: 44, border: 0, background: "none", cursor: "pointer", padding: 0, position: "relative",
+                          font: warm ? "600 13px var(--mono)" : "700 15px var(--sans)",
+                          color: set.done ? "var(--acc)" : warm ? "#7C8275" : "var(--faint)",
+                        }}
+                      >
+                        {label}
+                        {hasDetail && !warm && <span aria-hidden="true" style={{ position: "absolute", top: 8, right: 3, width: 5, height: 5, borderRadius: 3, background: "var(--acc)" }} />}
+                      </button>
                       <span style={{ font: "500 12px var(--mono)", color: "var(--faint)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                         {set.prev}
                       </span>
@@ -298,7 +419,7 @@ export function SessionScreen({
                         className="numfield"
                         type="text"
                         inputMode="decimal"
-                        aria-label={`Poids série ${j + 1}`}
+                        aria-label={`Poids ${warm ? "échauffement" : `série ${label}`}`}
                         value={set.weight === 0 ? "" : dec(set.weight)}
                         placeholder="0"
                         onChange={(e) => {
@@ -317,7 +438,7 @@ export function SessionScreen({
                         className="numfield"
                         type="text"
                         inputMode="numeric"
-                        aria-label={`Répétitions série ${j + 1}`}
+                        aria-label={`Répétitions ${warm ? "échauffement" : `série ${label}`}`}
                         value={set.reps === 0 ? "" : set.reps}
                         placeholder="0"
                         onChange={(e) => {
@@ -333,10 +454,10 @@ export function SessionScreen({
                       />
 
                       <button
-                        onClick={() => toggleDone(entry.id, set)}
+                        onClick={() => toggleDone(i, set)}
                         disabled={planned}
                         title={planned ? "Démarre la séance pour valider tes séries" : undefined}
-                        aria-label={set.done ? `Annuler la série ${j + 1}` : `Valider la série ${j + 1}`}
+                        aria-label={set.done ? `Annuler ${warm ? "l'échauffement" : `la série ${label}`}` : `Valider ${warm ? "l'échauffement" : `la série ${label}`}`}
                         aria-pressed={set.done}
                         style={{
                           width: 44, height: 44, borderRadius: 13, cursor: planned ? "default" : "pointer", opacity: planned ? 0.35 : 1, display: "grid", placeItems: "center", padding: 0,
@@ -348,9 +469,80 @@ export function SessionScreen({
                         <IconCheck />
                       </button>
                     </div>
-                  ))}
 
-                  <div style={{ display: "flex", gap: 8, marginTop: 4 }}>
+                    {showDetail && (
+                      <div style={{ margin: "6px 2px 2px", padding: 12, borderRadius: 14, background: "#121110", border: "1px solid rgba(255,255,255,.06)", display: "flex", flexDirection: "column", gap: 10 }}>
+                        <div role="group" aria-label="Type de série" style={{ display: "flex", gap: 6 }}>
+                          {([["work", "Travail"], ["warmup", "Échauffement"]] as const).map(([kind, text]) => (
+                            <button
+                              key={kind}
+                              onClick={() => editDetail(entry.id, set.id, { kind })}
+                              aria-pressed={set.kind === kind}
+                              style={{ flex: 1, minHeight: 40, borderRadius: 11, cursor: "pointer", font: "600 12px var(--sans)", background: set.kind === kind ? "var(--acc)" : "var(--surf2)", color: set.kind === kind ? "var(--ink)" : "var(--dim)", border: "1px solid rgba(255,255,255,.08)" }}
+                            >
+                              {text}
+                            </button>
+                          ))}
+                        </div>
+                        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                          <span className="eyebrow" style={{ width: 34, flex: "none" }}>RPE</span>
+                          {RPE_VALUES.map((v) => (
+                            <button
+                              key={v}
+                              onClick={() => editDetail(entry.id, set.id, { rpe: set.rpe === v ? null : v })}
+                              aria-pressed={set.rpe === v}
+                              aria-label={`Effort perçu ${v} sur 10`}
+                              style={{ flex: 1, minHeight: 40, borderRadius: 11, cursor: "pointer", font: "700 13px var(--mono)", background: set.rpe === v ? "var(--acc)" : "var(--surf2)", color: set.rpe === v ? "var(--ink)" : "var(--dim)", border: "1px solid rgba(255,255,255,.08)" }}
+                            >
+                              {v}
+                            </button>
+                          ))}
+                        </div>
+                        <input
+                          className="field"
+                          aria-label="Note sur la série"
+                          placeholder="Note (sensation, tempo, douleur…)"
+                          maxLength={140}
+                          defaultValue={set.note ?? ""}
+                          onChange={(e) => editDetail(entry.id, set.id, { note: e.target.value })}
+                          style={{ height: 44, borderRadius: 12, font: "500 13px var(--sans)" }}
+                        />
+                      </div>
+                    )}
+                    </div>
+                    );
+                  })}
+
+                  <div style={{ display: "flex", gap: 8, marginTop: 4, marginBottom: 8 }}>
+                    <form action={addWarmup} style={{ flex: 1 }}>
+                      <input type="hidden" name="entryId" value={entry.id} />
+                      <button
+                        type="submit"
+                        style={{ width: "100%", minHeight: 42, borderRadius: 13, background: "var(--surf2)", border: "1px solid var(--hair)", color: "var(--dim)", font: "600 12px var(--sans)", cursor: "pointer" }}
+                      >
+                        + Échauffement
+                      </button>
+                    </form>
+                    {i > 0 && (
+                      <form action={toggleSuperset} style={{ flex: 1 }}>
+                        <input type="hidden" name="entryId" value={entry.id} />
+                        <button
+                          type="submit"
+                          aria-pressed={entry.superset}
+                          style={{
+                            width: "100%", minHeight: 42, borderRadius: 13, cursor: "pointer", font: "600 12px var(--sans)",
+                            background: entry.superset ? "rgba(255,91,30,.14)" : "var(--surf2)",
+                            border: `1px solid ${entry.superset ? "rgba(255,91,30,.4)" : "var(--hair)"}`,
+                            color: entry.superset ? "var(--acc)" : "var(--dim)",
+                          }}
+                        >
+                          {entry.superset ? "Superset ✓" : "Superset"}
+                        </button>
+                      </form>
+                    )}
+                  </div>
+
+                  <div style={{ display: "flex", gap: 8 }}>
                     <form action={addSet} style={{ flex: 1 }}>
                       <input type="hidden" name="entryId" value={entry.id} />
                       <button
@@ -376,12 +568,25 @@ export function SessionScreen({
                     </form>
                   </div>
 
-                  {entry.note && (
-                    <div style={{ marginTop: 9, padding: "11px 13px", borderRadius: 13, background: "#121110", border: "1px solid rgba(255,255,255,.06)", display: "flex", gap: 9, alignItems: "center", color: "var(--dark)" }}>
-                      <IconPencil size={14} />
-                      <span style={{ font: "400 12px var(--sans)", color: "var(--faint)" }}>{entry.note}</span>
-                    </div>
-                  )}
+                  <form
+                    action={setEntryNote}
+                    style={{ marginTop: 9, padding: "0 13px", borderRadius: 13, background: "#121110", border: "1px solid rgba(255,255,255,.06)", display: "flex", gap: 9, alignItems: "center", color: "var(--dark)" }}
+                  >
+                    <input type="hidden" name="entryId" value={entry.id} />
+                    <IconPencil size={14} />
+                    <input
+                      name="note"
+                      defaultValue={entry.note ?? ""}
+                      maxLength={200}
+                      placeholder="Note sur l'exercice (réglage, sensation…)"
+                      aria-label={`Note sur ${entry.name}`}
+                      // Enregistré en quittant le champ ou avec Entrée.
+                      onBlur={(e) => {
+                        if (e.currentTarget.value.trim() !== (entry.note ?? "")) e.currentTarget.form?.requestSubmit();
+                      }}
+                      style={{ flex: 1, minWidth: 0, height: 44, background: "none", border: 0, outline: "none", color: "var(--faint)", font: "400 12px var(--sans)" }}
+                    />
+                  </form>
                 </div>
               )}
             </div>

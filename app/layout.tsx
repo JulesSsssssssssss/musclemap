@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Space_Grotesk, JetBrains_Mono } from "next/font/google";
+import { RegisterServiceWorker } from "@/components/RegisterServiceWorker";
 import "./globals.css";
 
 const grotesk = Space_Grotesk({
@@ -19,6 +20,9 @@ const mono = JetBrains_Mono({
 export const metadata: Metadata = {
   title: "MuscleMap",
   description: "Choisis un muscle sur le corps, trouve tes exercices, suis ta progression.",
+  applicationName: "MuscleMap",
+  appleWebApp: { capable: true, title: "MuscleMap", statusBarStyle: "black-translucent" },
+  icons: { icon: "/icons/192", apple: "/icons/180" },
 };
 
 export const viewport: Viewport = {
@@ -31,7 +35,10 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="fr" className={`${grotesk.variable} ${mono.variable}`}>
-      <body>{children}</body>
+      <body>
+        {children}
+        <RegisterServiceWorker />
+      </body>
     </html>
   );
 }

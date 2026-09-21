@@ -15,27 +15,34 @@ export default async function WorkoutPage({ params }: { params: Promise<{ id: st
 
   const prev = await previousSets(user.id, workout.entries.map((e) => e.exerciseId));
 
-  const entries: SessionEntry[] = workout.entries.map((entry) => ({
-    id: entry.id,
-    name: entry.exercise.name,
-    meta: `${entry.exercise.equipment} · ${entry.exercise.primaryMuscle.toUpperCase()}`,
-    note: entry.note,
-    overload: (() => {
-      const before = prev[entry.exerciseId];
-      const first = entry.sets[0];
-      return Boolean(before?.length && first && first.weight > before[0].weight);
-    })(),
-    sets: entry.sets.map((set, i) => {
-      const previous = prev[entry.exerciseId]?.[i];
-      return {
-        id: set.id,
-        weight: set.weight,
-        reps: set.reps,
-        done: set.done,
-        prev: previous ? `${dec(previous.weight)} × ${previous.reps}` : "—",
-      };
-    }),
-  }));
+  const entries: SessionEntry[] = workout.entries.map((entry, index) => {
+    const before = prev[entry.exerciseId];
+    const firstWork = entry.sets.find((s) => s.kind === "work");
+    let workIndex = 0; // « précédent » se compare série de travail à série de travail
+
+    return {
+      id: entry.id,
+      name: entry.exercise.name,
+      meta: `${entry.exercise.equipment} · ${entry.exercise.primaryMuscle.toUpperCase()}`,
+      note: entry.note,
+      superset: entry.superset,
+      linkedToNext: workout.entries[index + 1]?.superset ?? false,
+      overload: Boolean(before?.length && firstWork && firstWork.weight > before[0].weight),
+      sets: entry.sets.map((set) => {
+        const previous = set.kind === "work" ? before?.[workIndex++] : undefined;
+        return {
+          id: set.id,
+          weight: set.weight,
+          reps: set.reps,
+          done: set.done,
+          kind: set.kind === "warmup" ? "warmup" : "work",
+          rpe: set.rpe,
+          note: set.note,
+          prev: previous ? `${dec(previous.weight)} × ${previous.reps}` : "—",
+        };
+      }),
+    };
+  });
 
   return (
     <SessionScreen

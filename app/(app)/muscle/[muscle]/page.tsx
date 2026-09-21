@@ -9,13 +9,13 @@ import { requireUser } from "@/lib/auth";
 import { exerciseCounts } from "@/lib/queries";
 
 export default async function MusclePage({ params }: { params: Promise<{ muscle: string }> }) {
-  await requireUser();
+  const user = await requireUser();
   const { muscle } = await params;
   if (!(muscle in MUSCLES)) notFound();
 
   const key = muscle as MuscleKey;
   const subs = subsFor(key);
-  const { byMuscle, bySub } = await exerciseCounts();
+  const { byMuscle, bySub } = await exerciseCounts(user.id);
   const total = byMuscle[key] ?? 0;
   const face = FRONT_MUSCLES.includes(key);
 

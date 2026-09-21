@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { SettingsRows } from "@/components/SettingsRows";
 import { IconChevron } from "@/components/Icons";
-import { logout } from "@/app/actions";
+import { LogoutForm } from "@/components/LogoutForm";
 import { requireUser } from "@/lib/auth";
 import { WeeklyGoal } from "@/components/WeeklyGoal";
 import { profileStats, weeklyGoalFor } from "@/lib/queries";
@@ -80,14 +80,7 @@ export default async function ProfilePage() {
 
         <div style={{ padding: "14px 16px", borderRadius: 16, background: "var(--surf)", border: "1px solid var(--hair)", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
           <span style={{ font: "600 14px var(--sans)", minWidth: 0, overflow: "hidden", textOverflow: "ellipsis" }}>{user.email}</span>
-          <form action={logout}>
-            <button
-              type="submit"
-              style={{ minHeight: 38, padding: "0 13px", borderRadius: 11, background: "var(--surf2)", border: "1px solid var(--hair2)", color: "var(--acc)", font: "600 12px var(--sans)", cursor: "pointer" }}
-            >
-              Déconnexion
-            </button>
-          </form>
+          <LogoutForm />
         </div>
       </div>
     </div>

@@ -15,13 +15,13 @@ export default async function SummaryPage({ params }: { params: Promise<{ id: st
   const workout = await getWorkout(user.id, id);
   if (!workout || workout.status === "template") notFound();
 
-  const doneSets = workout.entries.flatMap((e) => e.sets.filter((s) => s.done));
+  const doneSets = workout.entries.flatMap((e) => e.sets.filter((s) => s.done && s.kind === "work"));
 
   // Volume par muscle → intensité du surlignage sur la silhouette.
   const volumeByMuscle = new Map<MuscleKey, number>();
   for (const entry of workout.entries) {
     const key = entry.exercise.muscle as MuscleKey;
-    const v = entry.sets.filter((s) => s.done).reduce((a, s) => a + Math.max(s.weight, 1) * s.reps, 0);
+    const v = entry.sets.filter((s) => s.done && s.kind === "work").reduce((a, s) => a + Math.max(s.weight, 1) * s.reps, 0);
     volumeByMuscle.set(key, (volumeByMuscle.get(key) ?? 0) + v);
   }
   const ranked = [...volumeByMuscle.entries()].sort((a, b) => b[1] - a[1]);
@@ -34,7 +34,7 @@ export default async function SummaryPage({ params }: { params: Promise<{ id: st
   const records: { name: string; label: string; value: string }[] = [];
   for (const entry of workout.entries) {
     const best = await listRecords(user.id, entry.exerciseId);
-    const top = entry.sets.filter((s) => s.done).reduce((a, s) => Math.max(a, s.weight), 0);
+    const top = entry.sets.filter((s) => s.done && s.kind === "work").reduce((a, s) => Math.max(a, s.weight), 0);
     if (top > 0 && best.weight && Math.abs(best.weight - top) < 0.001) {
       records.push({ name: entry.exercise.name, label: "Charge max", value: `${dec(top)} ${user.unit}` });
     }

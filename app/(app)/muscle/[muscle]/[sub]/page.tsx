@@ -14,7 +14,7 @@ export default async function SubMusclePage({
   params: Promise<{ muscle: string; sub: string }>;
   searchParams: Promise<{ equip?: string }>;
 }) {
-  await requireUser();
+  const user = await requireUser();
   const { muscle, sub } = await params;
   const query = await searchParams;
   if (!(muscle in MUSCLES)) notFound();
@@ -27,6 +27,7 @@ export default async function SubMusclePage({
   const equip = EQUIPMENTS.includes(query.equip ?? "") ? query.equip! : EQUIPMENTS[0];
 
   const exercises = await listExercises({
+    userId: user.id,
     muscle: key,
     subCode: current.code,
     equipment: equip === EQUIPMENTS[0] ? undefined : equip,
